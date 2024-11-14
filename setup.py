@@ -9,7 +9,7 @@ setup(
     author_email='kitamoto@nii.ac.jp',
     license='MIT License',
     packages=find_packages(),
-    install_requires=['mpi4py>=2.0',
+    install_requires=[
                       'numpy',
                       'torch',
                       'torchvision',

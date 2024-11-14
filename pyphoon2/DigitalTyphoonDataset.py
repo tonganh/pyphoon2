@@ -509,6 +509,9 @@ class DigitalTyphoonDataset(Dataset):
                                                                ignore_list=self.ignore_list,
                                                                filter_func=self.filter,
                                                                spectrum=self.spectrum)
+                if self.image_dir =='test_data_files/image/':
+                    print("sequence_obj.get_num_images()", sequence_obj.get_num_images())
+                    print("self.number_of_images", self.number_of_images)
                 self.number_of_images += sequence_obj.get_num_images()
 
         for sequence in self.sequences:
@@ -546,15 +549,20 @@ class DigitalTyphoonDataset(Dataset):
         :return: None
         """
         seq_start_date = datetime.strptime(metadata_json['start'], '%Y-%m-%d')
-
+        num_images = metadata_json['images'] if 'images' in metadata_json.keys() else metadata_json['frames']
+        metadata_json['images'] = num_images
         self.sequences.append(DigitalTyphoonSequence(sequence_str,
                                                      seq_start_date.year,
-                                                     metadata_json['images'],
+                                                     num_images,
                                                      transform_func=self.transform_func,
                                                      spectrum=self.spectrum,
                                                      verbose=self.verbose))
         self._sequence_str_to_seq_idx[sequence_str] = len(self.sequences) - 1
-
+        
+        does_metadata_has_season_key = 'season' not in metadata_json.keys()
+        if does_metadata_has_season_key:
+            metadata_json.__setitem__('season',metadata_json['year'])
+        
         if metadata_json['season'] not in self.season_to_sequence_nums:
             self.season_to_sequence_nums[metadata_json['season']] = []
         self.season_to_sequence_nums[metadata_json['season']].append(sequence_str)

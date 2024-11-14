@@ -2,12 +2,12 @@ import os
 import warnings
 from datetime import datetime
 
-import h5py
+from typing import Callable
+
 from pathlib import Path
 import numpy as np
 from typing import List, Dict
 import pandas as pd
-from collections import OrderedDict
 
 from pyphoon2.DigitalTyphoonImage import DigitalTyphoonImage
 from pyphoon2.DigitalTyphoonUtils import parse_image_filename, is_image_file, TRACK_COLS
@@ -24,7 +24,9 @@ class DigitalTyphoonSequence:
         :param start_season: int, the season in which the typhoon starts in
         :param num_images: int, number of images in the sequence
         :param transform_func: this function will be called on each image before saving it/returning it.
-                               It should take and return a np array
+                            It should take and return a np array
+        :param spectrum: str, specifies the spectrum of the images (e.g., 'Infrared')
+        :param verbose: bool, if True, additional information and warnings will be printed during processing
         """
         self.verbose = verbose
 
@@ -58,7 +60,7 @@ class DigitalTyphoonSequence:
                                           load_imgs_into_mem=False,
                                           ignore_list=None,
                                           spectrum=None,
-                                          filter_func=lambda img: True) -> None:
+                                          filter_func: Callable[[DigitalTyphoonImage], bool] = lambda img: True) -> None:
         """
         Given a path to a directory containing images of a typhoon sequence, process the images into the current
         sequence object. If 'load_imgs_into_mem' is set to True, the images will be read as numpy arrays and stored in
@@ -71,6 +73,9 @@ class DigitalTyphoonSequence:
         :param filter_func: function that accepts an image and returns True or False if it should be included in the sequence
         :return: None
         """
+        if not os.path.isdir(directory_path):
+            raise NotADirectoryError(f"{directory_path} is not a valid directory.")
+    
         if ignore_list is None:
             ignore_list = set([])
 
@@ -137,6 +142,9 @@ class DigitalTyphoonSequence:
         :param csv_delimiter: delimiter for the csv file
         :return: None
         """
+        if not os.path.exists(track_filepath):
+            raise FileNotFoundError(f"The track file {track_filepath} does not exist.")
+        
         df = pd.read_csv(track_filepath, delimiter=csv_delimiter)
         data = df.to_numpy()
         for row in data:
