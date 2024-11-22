@@ -1,6 +1,6 @@
 import torch
 
 # Computation parameters
-IMAGE_DIR = '/app/datasets/typhoon-202305/WP/image/'
-METADATA_DIR = '/app/datasets/typhoon-202305/WP/metadata/'
-METATADA_JSON = '/app/datasets/typhoon-202305/WP/metadata.json'
+IMAGE_DIR = 'test_data_files/image/'
+METADATA_DIR = 'test_data_files/metadata/'
+METATADA_JSON = 'test_data_files/metadata.json'
