@@ -1,30 +1,54 @@
 #!/bin/bash
 
-# Check if the folder exists
-if [ ! -d "test_data_files/image/200801" ]; then
-  echo "Directory 'test_data_files/image/200801' does not exist. Downloading required files..."
+# Variables
+ZIP_FILE="test_data_files.zip"
+DOWNLOAD_URL="https://minio.hisoft.com.vn/anhtn/test_data_files.zip"
+TARGET_DIR="test_data_files/image/200801"
+EXTRACT_DIR="./"
 
-  # Download the ZIP file
-  wget -O test_data_files.zip https://minio.hisoft.com.vn/anhtn/test_data_files.zip
-
-  # Check if the download was successful
+# Function to download the ZIP file
+download_zip() {
+  echo "Downloading $ZIP_FILE from $DOWNLOAD_URL..."
+  wget -O "$ZIP_FILE" "$DOWNLOAD_URL"
+  
   if [ $? -ne 0 ]; then
-    echo "Failed to download the file. Exiting."
+    echo "Error: Failed to download $ZIP_FILE. Exiting."
     exit 1
   fi
+  echo "Download completed successfully."
+}
 
-  # Unzip the file to the specified directory
-  unzip test_data_files.zip -d test_data_files
-
-  # Check if unzip was successful
+# Function to unzip the ZIP file
+unzip_files() {
+  echo "Extracting $ZIP_FILE to $EXTRACT_DIR/..."
+  unzip "$ZIP_FILE" -d "$EXTRACT_DIR"
+  
   if [ $? -ne 0 ]; then
-    echo "Failed to unzip the file. Exiting."
+    echo "Error: Failed to unzip $ZIP_FILE. Exiting."
     exit 1
   fi
+  echo "Extraction completed successfully."
+}
 
-  echo "Files downloaded and extracted successfully."
+# Main script execution
+if [ -d "$TARGET_DIR" ]; then
+  echo "Directory '$TARGET_DIR' already exists. Skipping download and extraction."
 else
-  echo "Directory 'test_data_files/image/200801' already exists. Skipping download."
+  if [ -f "$ZIP_FILE" ]; then
+    echo "ZIP file '$ZIP_FILE' already exists. Skipping download."
+  else
+    download_zip
+  fi
+
+  # Only unzip if the target directory does not exist
+  if [ ! -d "$TARGET_DIR" ]; then
+    unzip_files
+  else
+    echo "After checking, directory '$TARGET_DIR' exists. Skipping extraction."
+  fi
+
+  # Optional: Remove the ZIP file after extraction
+  # rm "$ZIP_FILE"
 fi
 
 python3 -m unittest test_DigitalTyphoonDataset.TestDigitalTyphoonDataset
