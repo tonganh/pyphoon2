@@ -1,7 +1,7 @@
+import os
 from datetime import datetime
 from enum import Enum
 from typing import Tuple
-
 
 
 class SPLIT_UNIT(Enum):
@@ -127,24 +127,33 @@ def parse_image_filename(filename: str, separator='-') -> Tuple[str, datetime, s
                                      day=date_day, hour=date_hour)
         return sequence_num, sequence_datetime, satellite
     except ValueError:
-        raise ValueError(f"Filename {filename} does not match the expected format.")
+        raise ValueError(
+            f"Filename {filename} does not match the expected format.")
 
 
 def get_seq_str_from_track_filename(filename: str) -> str:
     """
-    Given a track filename, returns the sequence ID it belongs to
+    Given a track filename, returns the sequence ID it belongs to.
 
-    :param filename: str, the filename
-    :return: str, the sequence ID string
+    :param filename: str, the filename (e.g., "sequence1.csv")
+    :return: str, the sequence ID string (e.g., "sequence1")
+    :raises ValueError: If the filename does not end with '.csv'
     """
-    sequence_num = filename.removesuffix(".csv")
+    # Split the filename into root and extension
+    sequence_num, ext = os.path.splitext(filename)
+
+    # Validate the extension
+    if ext.lower() != '.csv':
+        raise ValueError(f"Unexpected file extension: '{
+                         ext}'. Expected a '.csv' file.")
+
     return sequence_num
 
 
 def is_image_file(filename: str) -> bool:
     """
     Given a DigitalTyphoon file, returns if it is an h5 image.
-    
+
     :param filename: str, the filename
     :return: bool, True if it is an h5 image, False otherwise
     """
