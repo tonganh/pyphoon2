@@ -24,11 +24,10 @@ jobs:
 
       # 3. Set up Miniconda
       - name: Set up Miniconda
-        uses: conda-incubator/setup-miniconda@v2
+        uses: conda-incubator/setup-miniconda@v3
         with:
-          auto-update-conda: true
-          channels: conda-forge
-          python-version: 3.10 # Default; overridden for PyPy
+          auto-activate-base: true
+          activate-environment: ''
 
       # 4. Create and activate Conda environment
       - name: Create and activate Conda environment
