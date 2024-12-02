@@ -144,8 +144,7 @@ def get_seq_str_from_track_filename(filename: str) -> str:
 
     # Validate the extension
     if ext.lower() != '.csv':
-        raise ValueError(f"Unexpected file extension: '{
-                         ext}'. Expected a '.csv' file.")
+        raise ValueError(f"Unexpected file extension: '{ext}'. Expected a '.csv' file.")
 
     return sequence_num
 
