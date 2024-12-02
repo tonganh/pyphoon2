@@ -4,7 +4,7 @@
 ZIP_FILE="test_data_files.zip"
 DOWNLOAD_URL="https://minio.hisoft.com.vn/anhtn/test_data_files.zip"
 TARGET_DIR="test_data_files/image/200801"
-EXTRACT_DIR="test_data_files"
+EXTRACT_DIR="/"
 
 # Function to download the ZIP file
 download_zip() {
