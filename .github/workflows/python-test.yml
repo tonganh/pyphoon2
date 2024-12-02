@@ -22,5 +22,5 @@ jobs:
         run: pip install .
       - name: Check did we install pyphoon2
         run: pip list | grep pyphoon2
-      - name: Run test:
+      - name: Run test
         run: cd tests && sh run_all_tests.sh
