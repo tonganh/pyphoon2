@@ -3,7 +3,7 @@
 *.h5
 *.zip
 # Byte-compiled / optimized / DLL files
-tests/test_data_files/**/*.csv
+tests/test_data_files
 __pycache__/
 *.py[cod]
 *$py.class
