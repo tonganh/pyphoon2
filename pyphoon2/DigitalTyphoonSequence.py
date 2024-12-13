@@ -74,8 +74,9 @@ class DigitalTyphoonSequence:
         :return: None
         """
         if not os.path.isdir(directory_path):
-            raise NotADirectoryError(f"{directory_path} is not a valid directory.")
-    
+            raise NotADirectoryError(
+                f"{directory_path} is not a valid directory.")
+
         if ignore_list is None:
             ignore_list = set([])
 
@@ -84,7 +85,8 @@ class DigitalTyphoonSequence:
 
         self.set_images_root_path(directory_path)
         for root, dirs, files in os.walk(directory_path, topdown=True):
-            filepaths = [(file,) + parse_image_filename(file) for file in files if is_image_file(file)]
+            filepaths = [(file,) + parse_image_filename(file)
+                         for file in files if is_image_file(file)]
             filepaths.sort(key=lambda x: x[2])  # sort by datetime
             for filepath, file_sequence, file_date, file_satellite in filepaths:
                 if filepath not in ignore_list:
@@ -100,7 +102,8 @@ class DigitalTyphoonSequence:
                               f'number of expected images ({self.num_original_images}) from metadata. If this is expected, ignore this warning.')
 
             if len(self.images) < self.num_track_entries:
-                warnings.warn(f'Only {len(self.images)} of {self.num_track_entries} track entries have images.')
+                warnings.warn(
+                    f'Only {len(self.images)} of {self.num_track_entries} track entries have images.')
 
     def get_start_season(self) -> int:
         """
@@ -143,8 +146,9 @@ class DigitalTyphoonSequence:
         :return: None
         """
         if not os.path.exists(track_filepath):
-            raise FileNotFoundError(f"The track file {track_filepath} does not exist.")
-        
+            raise FileNotFoundError(
+                f"The track file {track_filepath} does not exist.")
+
         df = pd.read_csv(track_filepath, delimiter=csv_delimiter)
         data = df.to_numpy()
         for row in data:
@@ -192,7 +196,7 @@ class DigitalTyphoonSequence:
         """
         return self.track_data
 
-    def get_image_at_idx(self, idx:int, spectrum='Infrared') -> DigitalTyphoonImage:
+    def get_image_at_idx(self, idx: int, spectrum='Infrared') -> DigitalTyphoonImage:
         """
         Returns the idx'th DigitalTyphoonImage in the sequence. raises an exception if the idx is out of the
         the sequence's range
@@ -202,7 +206,8 @@ class DigitalTyphoonSequence:
         :return: DigitalTyphoonImage, the image object
         """
         if idx < 0 or idx >= len(self.images):
-            raise ValueError(f'Requested idx {idx} is outside range of sequence images ({len(self.images)})')
+            raise ValueError(
+                f'Requested idx {idx} is outside range of sequence images ({len(self.images)})')
         return self.images[idx]
 
     def get_image_at_idx_as_numpy(self, idx: int, spectrum=None) -> np.ndarray:
@@ -266,7 +271,7 @@ class DigitalTyphoonSequence:
     def get_images_root_path(self) -> str:
         """
         Gets the root path to the image directory
-        
+
         :return: str, the root path
         """
         return str(self.img_root)

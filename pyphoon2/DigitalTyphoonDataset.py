@@ -31,7 +31,11 @@ class DigitalTyphoonDataset(Dataset):
                  filter_func=None,
                  transform_func=None,
                  transform=None,
-                 verbose=False) -> None:
+                 verbose=False,
+                 image_dirs: List[str] = None,
+                 metadata_dirs: List[str] = None,
+                 metadata_jsons: List[str] = None
+                 ) -> None:
         """
         Dataloader for the DigitalTyphoon dataset.
 
@@ -55,7 +59,7 @@ class DigitalTyphoonDataset(Dataset):
                          take in said tuple, and return a tuple of (transformed image/sequence, transformed label)
         :param verbose: Print verbose program information
         """
-
+        print("Line 62")
         if not SPLIT_UNIT.has_value(split_dataset_by):
             raise ValueError(f'Split unit must one of the following\n'
                              f'    {[item.value for item in SPLIT_UNIT]}.\n'
@@ -80,6 +84,13 @@ class DigitalTyphoonDataset(Dataset):
         # Path to the metadata file
         self.metadata_json = metadata_json
 
+        # Directories containing images folders and track datas
+        self.image_dirs = image_dirs
+        self.metadata_dirs = metadata_dirs
+
+        # List of metadata files
+        self.metadata_jsons = metadata_jsons
+
         # labels to retrieve when accessing the dataset
         self.labels = None
         self.set_label(labels)
@@ -100,34 +111,43 @@ class DigitalTyphoonDataset(Dataset):
         self.transform = transform
 
         # Structures holding the data objects
-        self.sequences: List[DigitalTyphoonSequence] = list()  # List of seq_str objects
-                                                                # contains sequences in order they are present in metadata.json
-        self._sequence_str_to_seq_idx: Dict[str, int] = {}  # Sequence ID to idx in sequences array
-        self._image_idx_to_sequence: Dict[int, DigitalTyphoonSequence] = {}  # Image idx to what seq_str it belongs to
-        self._seq_str_to_first_total_idx: Dict[str, int] = {}  # Sequence string to the first total idx belonging to
-                                                               #  that seq_str
+        # List of seq_str objects
+        self.sequences: List[DigitalTyphoonSequence] = list()
+        # contains sequences in order they are present in metadata.json
+        # Sequence ID to idx in sequences array
+        self._sequence_str_to_seq_idx: Dict[str, int] = {}
+        # Image idx to what seq_str it belongs to
+        self._image_idx_to_sequence: Dict[int, DigitalTyphoonSequence] = {}
+        # Sequence string to the first total idx belonging to
+        self._seq_str_to_first_total_idx: Dict[str, int] = {}
+        #  that seq_str
 
         self.label = ('grade', 'lat')
 
         self.number_of_sequences = 0
         self.number_of_nonempty_sequences = 0
-        self.number_of_original_images = 0  # Number of images in the original dataset before augmentation and removal
-        self.number_of_images = 0  # number of images in the dataset, after augmentation and removal
+        # Number of images in the original dataset before augmentation and removal
+        self.number_of_original_images = 0
+        # number of images in the dataset, after augmentation and removal
+        self.number_of_images = 0
         self.number_of_nonempty_seasons = None
 
         # Season to list of sequences that start in that season
-        self.season_to_sequence_nums: OrderedDict[int, List[str]] = OrderedDict()
+        self.season_to_sequence_nums: OrderedDict[int, List[str]] = OrderedDict(
+        )
 
         # Process the data into the loader
         # It must happen in this order!
-        _verbose_print(f'Processing metadata file at: {metadata_json}', self.verbose)
-        self.process_metadata_file(metadata_json)
-
-        _verbose_print(f'Initializing track data from: {metadata_dir}', self.verbose)
-        self._populate_track_data_into_sequences(self.metadata_dir)
-
-        _verbose_print(f'Initializing image_arrays from: {image_dir}', self.verbose)
-        self._populate_images_into_sequences(self.image_dir)
+        is_load_data_from_multi_dirs = self.is_load_data_from_multi_dirs()
+        print("is_load_data_from_multi_dirs", is_load_data_from_multi_dirs)
+        if not is_load_data_from_multi_dirs:
+            print('Loading data from single directory')
+            self.load_data_from_single_dir(
+                metadata_json, metadata_dir, image_dir)
+        else:
+            print('Loading data from multiple directories')
+            self.load_data_from_multi_dirs(
+                image_dirs, metadata_dirs, metadata_jsons)
 
         _verbose_print(f'Indexing the dataset', verbose=self.verbose)
         self._assign_all_images_a_dataset_idx()
@@ -136,7 +156,7 @@ class DigitalTyphoonDataset(Dataset):
         """
         Gives the length of the dataset. If "get_images_by_sequence" was set to True on initialization, number of
         sequences is returned. Otherwise, number of images is returned.
-        
+
         :return: int
         """
         if self.get_images_by_sequence:
@@ -166,7 +186,8 @@ class DigitalTyphoonDataset(Dataset):
             seq = self.get_ith_sequence(idx)
             images = seq.get_all_images_in_sequence()
             image_arrays = np.array([image.image() for image in images])
-            labels = np.array([self._labels_from_label_strs(image, self.labels) for image in images])
+            labels = np.array([self._labels_from_label_strs(
+                image, self.labels) for image in images])
             if self.transform:
                 return self.transform((image_arrays, labels))
             return image_arrays, labels
@@ -178,12 +199,52 @@ class DigitalTyphoonDataset(Dataset):
                 return self.transform((ret_img, labels))
             return ret_img, labels
 
+    def is_load_data_from_multi_dirs(self) -> bool:
+        condition_image_dirs = self.image_dirs is not None
+        condition_metadata_dirs = self.metadata_dirs is not None
+        condition_metadata_jsons = self.metadata_jsons is not None
+        return condition_image_dirs and condition_metadata_dirs and condition_metadata_jsons
+
+    def is_valid_input_multi_dirs(self, image_dirs: List[str] = None, metadata_dirs: List[str] = None, metadata_jsons: List[str] = None) -> bool:
+        condition_image_dirs = len(image_dirs) == len(metadata_dirs)
+        condition_metadata_dirs = len(
+            metadata_dirs) == len(metadata_jsons)
+        return condition_image_dirs and condition_metadata_dirs
+
+    def load_data_from_multi_dirs(self, image_dirs: List[str] = None, metadata_dirs: List[str] = None, metadata_jsons: List[str] = None):
+        is_valid_input_multi_dirs = self.is_valid_input_multi_dirs(
+            image_dirs=image_dirs, metadata_dirs=metadata_dirs, metadata_jsons=metadata_jsons)
+        if not is_valid_input_multi_dirs:
+            raise ValueError(
+                'Input directories are not of the same length. Please ensure that the number of image_dirs, metadata_dirs, and metadata_jsons are the same.')
+        self.process_metadata_files(metadata_jsons)
+        for i in range(len(image_dirs)):
+            prefix = f'{i}_'
+            _verbose_print(
+                f'Initializing track data from: {metadata_dirs[i]}', self.verbose)
+            self._populate_track_data_into_sequences(
+                metadata_dirs[i], prefix=prefix)
+
+            _verbose_print(
+                f'Initializing image_arrays from a specific image_dir: {image_dirs[i]}', self.verbose)
+            self._populate_images_into_sequences(image_dirs[i], prefix=prefix)
+
+    def load_data_from_single_dir(self, metadata_json: str, metadata_dir: str, image_dir: str):
+        self.process_metadata_file(metadata_json)
+        _verbose_print(
+            f'Initializing track data from: {metadata_dir}', self.verbose)
+        self._populate_track_data_into_sequences(metadata_dir)
+
+        _verbose_print(
+            f'Initializing image_arrays from a specific image_dir: {image_dir}', self.verbose)
+        self._populate_images_into_sequences(image_dir)
+
     def set_label(self, label_strs) -> None:
         """
         Sets what label to retrieve when accessing the data set via dataset[idx] or dataset.__getitem__(idx)
         Options are:
         season, month, day, hour, grade, lat, lng, pressure, wind, dir50, long50, short50, dir30, long30, short30, landfall, interpolated
-      
+
         :param label_strs: a single string (e.g. 'grade') or a list/tuple of strings (e.g. ['lat', 'lng']) of labels.
         :return: None
         """
@@ -226,7 +287,8 @@ class DigitalTyphoonDataset(Dataset):
         if split_by is None:
             split_by = self.split_dataset_by
 
-        _verbose_print(f"Splitting the dataset into proportions {lengths}, by {split_by}.", verbose=self.verbose)
+        _verbose_print(
+            f"Splitting the dataset into proportions {lengths}, by {split_by}.", verbose=self.verbose)
 
         if not SPLIT_UNIT.has_value(split_by):
             warnings.warn(f'Split unit \'{split_by}\' is not within the list of known split units: '
@@ -243,7 +305,7 @@ class DigitalTyphoonDataset(Dataset):
     def images_from_season(self, season: int) -> Subset:
         """
         Given a start season, return a Subset (Dataset) object containing all the images from that season, in order
-        
+
         :param season: the start season as a string
         :return: Subset
         """
@@ -257,7 +319,7 @@ class DigitalTyphoonDataset(Dataset):
     def image_objects_from_season(self, season: int) -> List:
         """
         Given a start season, return a list of DigitalTyphoonImage objects for images from that season
-        
+
         :param season: the start season as a string
         :return: List[DigitalTyphoonImage]
         """
@@ -280,7 +342,8 @@ class DigitalTyphoonDataset(Dataset):
             sequence_strs = self.get_seq_ids_from_season(season)
             for seq_str in sequence_strs:
                 seq_obj = self._get_seq_from_seq_str(seq_str)
-                return_indices.extend(self.seq_indices_to_total_indices(seq_obj))
+                return_indices.extend(
+                    self.seq_indices_to_total_indices(seq_obj))
         return Subset(self, return_indices)
 
     def images_from_sequence(self, sequence_str: str) -> Subset:
@@ -315,7 +378,8 @@ class DigitalTyphoonDataset(Dataset):
         return_indices = []
         for sequence_str in sequence_strs:
             seq_object = self._get_seq_from_seq_str(sequence_str)
-            return_indices.extend(self.seq_indices_to_total_indices(seq_object))
+            return_indices.extend(
+                self.seq_indices_to_total_indices(seq_object))
         return Subset(self, return_indices)
 
     def images_as_tensor(self, indices: List[int]) -> torch.Tensor:
@@ -325,7 +389,8 @@ class DigitalTyphoonDataset(Dataset):
         :param indices: List[int]
         :return: torch Tensor
         """
-        images = np.array([self.get_image_from_idx(idx).image() for idx in indices])
+        images = np.array([self.get_image_from_idx(idx).image()
+                          for idx in indices])
         return torch.Tensor(images)
 
     def labels_as_tensor(self, indices: List[int], label: str) -> torch.Tensor:
@@ -336,7 +401,8 @@ class DigitalTyphoonDataset(Dataset):
         :param label: str, denoting which label to retrieve
         :return: torch Tensor
         """
-        images = [self.get_image_from_idx(idx).value_from_string(label) for idx in indices]
+        images = [self.get_image_from_idx(
+            idx).value_from_string(label) for idx in indices]
         return torch.Tensor(images)
 
     def get_number_of_sequences(self):
@@ -374,7 +440,7 @@ class DigitalTyphoonDataset(Dataset):
     def get_nonempty_seasons(self) -> List[int]:
         """
         Returns a list of the seasons that typhoons have started in, that have at least one image, in chronological order
-        
+
         :return: List[int]
         """
         if self.number_of_nonempty_seasons is None:
@@ -421,10 +487,31 @@ class DigitalTyphoonDataset(Dataset):
         """
         with open(filepath, 'r') as f:
             data = json.load(f)
-        self.number_of_sequences = len(data)
+        print("self.number_of_sequences before", self.number_of_sequences)
+        self.number_of_sequences += len(data)
+        print("self.number_of_sequences after", self.number_of_sequences)
 
+        print("self.sequences length", len(self.sequences))
         for sequence_str, metadata in sorted(data.items()):
             self._read_one_seq_from_metadata(sequence_str, metadata)
+
+    def process_metadata_files(self, filepaths: List[str]):
+        """
+        Reads and processes JSON metadata file's information into dataset.
+
+        :param filepath: path to metadata file
+        :return: metadata JSON object
+        """
+        length_filepaths = len(filepaths)
+        for i in range(length_filepaths):
+            filepath = filepaths[i]
+            with open(filepath, 'r') as f:
+                data = json.load(f)
+            self.number_of_sequences += len(data)
+            for sequence_str, metadata in sorted(data.items()):
+                sequence_str_unique = f'{i}_{sequence_str}'
+                self._read_one_seq_from_metadata(sequence_str_unique, metadata)
+            print("self.sequences", len(self.sequences))
 
     def get_seq_ids_from_season(self, season: int) -> List[str]:
         """
@@ -434,7 +521,8 @@ class DigitalTyphoonDataset(Dataset):
         :return: a list of the sequence IDs starting in that season
         """
         if season not in self.season_to_sequence_nums:
-            raise ValueError(f'Season \'{season}\' is not within the list of start seasons.')
+            raise ValueError(
+                f'Season \'{season}\' is not within the list of start seasons.')
         return self.season_to_sequence_nums[season]
 
     def total_image_idx_to_sequence_idx(self, total_idx: int) -> int:
@@ -446,9 +534,11 @@ class DigitalTyphoonDataset(Dataset):
         :return: the inner-sequence image index.
         """
         sequence = self._image_idx_to_sequence[total_idx]
-        start_idx = self._seq_str_to_first_total_idx[sequence.get_sequence_str()]
+        start_idx = self._seq_str_to_first_total_idx[sequence.get_sequence_str(
+        )]
         if total_idx >= self.number_of_images:
-            raise ValueError(f'Image {total_idx} is beyond the number of images in the dataset.')
+            raise ValueError(
+                f'Image {total_idx} is beyond the number of images in the dataset.')
         return total_idx - start_idx
 
     def seq_idx_to_total_image_idx(self, seq_str: str, seq_idx: int) -> int:
@@ -462,7 +552,8 @@ class DigitalTyphoonDataset(Dataset):
         """
         sequence_obj = self._get_seq_from_seq_str(seq_str)
         if seq_idx >= sequence_obj.get_num_images():
-            raise ValueError(f'Image {seq_idx} is beyond the number of images in the dataset.')
+            raise ValueError(
+                f'Image {seq_idx} is beyond the number of images in the dataset.')
         return self._seq_str_to_first_total_idx[seq_str] + seq_idx
 
     def seq_indices_to_total_indices(self, seq_obj: DigitalTyphoonSequence) -> List[int]:
@@ -493,7 +584,7 @@ class DigitalTyphoonDataset(Dataset):
         """
         return self.sequences
 
-    def _populate_images_into_sequences(self, image_dir: str) -> None:
+    def _populate_images_into_sequences(self, image_dir: str, prefix: str = None) -> None:
         """
         Traverses the image directory and populates each of the images sequentially into their respective seq_str
         objects.
@@ -501,17 +592,19 @@ class DigitalTyphoonDataset(Dataset):
         :param image_dir: path to directory containing directory of typhoon images.
         :return: None
         """
-        load_into_mem = self.load_data_into_memory in {LOAD_DATA.ONLY_IMG, LOAD_DATA.ALL_DATA}
+        load_into_mem = self.load_data_into_memory in {
+            LOAD_DATA.ONLY_IMG, LOAD_DATA.ALL_DATA}
         for root, dirs, files in os.walk(image_dir, topdown=True):
-            for dir_name in sorted(dirs):  # Read sequences in chronological order, not necessary but convenient
-                sequence_obj = self._get_seq_from_seq_str(dir_name)
+            # Read sequences in chronological order, not necessary but convenient
+            for dir_name in sorted(dirs):
+                seq_str = dir_name
+                if prefix:
+                    seq_str = f'{prefix}{seq_str}'
+                sequence_obj = self._get_seq_from_seq_str(seq_str)
                 sequence_obj.process_seq_img_dir_into_sequence(root+dir_name, load_into_mem,
                                                                ignore_list=self.ignore_list,
                                                                filter_func=self.filter,
                                                                spectrum=self.spectrum)
-                if self.image_dir =='test_data_files/image/':
-                    print("sequence_obj.get_num_images()", sequence_obj.get_num_images())
-                    print("self.number_of_images", self.number_of_images)
                 self.number_of_images += sequence_obj.get_num_images()
 
         for sequence in self.sequences:
@@ -523,7 +616,7 @@ class DigitalTyphoonDataset(Dataset):
                     warnings.warn(f'Sequence {sequence.sequence_str} has only {sequence.get_num_images()} when '
                                   f'it should have {sequence.num_original_images}. If this is intended, ignore this warning.')
 
-    def _populate_track_data_into_sequences(self, metadata_dir: str) -> None:
+    def _populate_track_data_into_sequences(self, metadata_dir: str, prefix: str = None) -> None:
         """
         Traverses the track data files and populates each into their respective seq_str objects
 
@@ -533,10 +626,14 @@ class DigitalTyphoonDataset(Dataset):
         for root, dirs, files in os.walk(metadata_dir, topdown=True):
             for file in sorted(files):
                 file_sequence = get_seq_str_from_track_filename(file)
+                if prefix:
+                    file_sequence = f'{prefix}{file_sequence}'
                 if self.sequence_exists(file_sequence):
-                    self._get_seq_from_seq_str(file_sequence).set_track_path(root + file)
+                    self._get_seq_from_seq_str(
+                        file_sequence).set_track_path(root + file)
                     # if self.load_data_into_memory in {LOAD_DATA.ONLY_TRACK, LOAD_DATA.ALL_DATA}:
-                    self._read_in_track_file_to_sequence(file_sequence, root + file)
+                    self._read_in_track_file_to_sequence(
+                        file_sequence, root + file)
 
     def _read_one_seq_from_metadata(self, sequence_str: str,
                                     metadata_json: Dict):
@@ -549,8 +646,10 @@ class DigitalTyphoonDataset(Dataset):
         :return: None
         """
         seq_start_date = datetime.strptime(metadata_json['start'], '%Y-%m-%d')
-        num_images = metadata_json['images'] if 'images' in metadata_json.keys() else metadata_json['frames']
+        num_images = metadata_json['images'] if 'images' in metadata_json.keys(
+        ) else metadata_json['frames']
         metadata_json['images'] = num_images
+        print("Line 654", len(self.sequences))
         self.sequences.append(DigitalTyphoonSequence(sequence_str,
                                                      seq_start_date.year,
                                                      num_images,
@@ -558,14 +657,15 @@ class DigitalTyphoonDataset(Dataset):
                                                      spectrum=self.spectrum,
                                                      verbose=self.verbose))
         self._sequence_str_to_seq_idx[sequence_str] = len(self.sequences) - 1
-        
+
         does_metadata_has_season_key = 'season' not in metadata_json.keys()
         if does_metadata_has_season_key:
-            metadata_json.__setitem__('season',metadata_json['year'])
-        
+            metadata_json.__setitem__('season', metadata_json['year'])
+
         if metadata_json['season'] not in self.season_to_sequence_nums:
             self.season_to_sequence_nums[metadata_json['season']] = []
-        self.season_to_sequence_nums[metadata_json['season']].append(sequence_str)
+        self.season_to_sequence_nums[metadata_json['season']].append(
+            sequence_str)
         self.number_of_original_images += metadata_json['images']
 
     def _assign_all_images_a_dataset_idx(self):
@@ -576,7 +676,8 @@ class DigitalTyphoonDataset(Dataset):
         """
         dataset_idx_iter = 0
         for sequence in self.sequences:
-            self._seq_str_to_first_total_idx[sequence.get_sequence_str()] = dataset_idx_iter
+            self._seq_str_to_first_total_idx[sequence.get_sequence_str(
+            )] = dataset_idx_iter
             for idx in range(sequence.get_num_images()):
                 self._image_idx_to_sequence[dataset_idx_iter] = sequence
                 dataset_idx_iter += 1
@@ -617,12 +718,14 @@ class DigitalTyphoonDataset(Dataset):
             subset_lengths: List[int] = []
             for i, frac in enumerate(lengths):
                 if frac < 0 or frac > 1:
-                    raise ValueError(f"Fraction at index {i} is not between 0 and 1")
+                    raise ValueError(
+                        f"Fraction at index {i} is not between 0 and 1")
                 n_items_in_split = int(
                     math.floor(dataset_length * frac)  # type: ignore[arg-type]
                 )
                 subset_lengths.append(n_items_in_split)
-            remainder = dataset_length - sum(subset_lengths)  # type: ignore[arg-type]
+            remainder = dataset_length - \
+                sum(subset_lengths)  # type: ignore[arg-type]
             # add 1 to all the lengths in round-robin fashion until the remainder is 0
             for i in range(remainder):
                 idx_to_add_at = i % len(subset_lengths)
@@ -635,7 +738,8 @@ class DigitalTyphoonDataset(Dataset):
 
             # Cannot verify that dataset is Sized
         if sum(lengths) != dataset_length:  # type: ignore[arg-type]
-            raise ValueError("Sum of input lengths does not equal the length of the input dataset!")
+            raise ValueError(
+                "Sum of input lengths does not equal the length of the input dataset!")
 
         return lengths
 
@@ -660,7 +764,8 @@ class DigitalTyphoonDataset(Dataset):
         :return: List of Subset objects
         """
         lengths = self._calculate_split_lengths(lengths)
-        return_indices_sorted = [[length, i, []] for i, length in enumerate(lengths)]
+        return_indices_sorted = [[length, i, []]
+                                 for i, length in enumerate(lengths)]
         return_indices_sorted.sort(key=lambda x: x[0])
 
         non_empty_season_indices = []
@@ -673,8 +778,10 @@ class DigitalTyphoonDataset(Dataset):
                     break
             if nonempty:
                 non_empty_season_indices.append(idx)
-        non_empty_season_indices = [non_empty_season_indices[idx] for idx in randperm(len(non_empty_season_indices), generator=generator)]
-        randomized_season_list = [list(self.season_to_sequence_nums.keys())[i] for i in non_empty_season_indices]
+        non_empty_season_indices = [non_empty_season_indices[idx] for idx in randperm(
+            len(non_empty_season_indices), generator=generator)]
+        randomized_season_list = [list(self.season_to_sequence_nums.keys())[
+            i] for i in non_empty_season_indices]
 
         num_buckets = len(return_indices_sorted)
         bucket_counter = 0
@@ -685,7 +792,8 @@ class DigitalTyphoonDataset(Dataset):
                     sequence_obj = self._get_seq_from_seq_str(seq)
                     if self.get_images_by_sequence:
                         if sequence_obj.get_num_images() > 0:  # Only append if the sequence has images
-                            return_indices_sorted[bucket_counter][2].append(self._sequence_str_to_seq_idx[seq])
+                            return_indices_sorted[bucket_counter][2].append(
+                                self._sequence_str_to_seq_idx[seq])
                     else:
                         return_indices_sorted[bucket_counter][2] \
                             .extend(self.seq_indices_to_total_indices(self._get_seq_from_seq_str(seq)))
@@ -719,12 +827,15 @@ class DigitalTyphoonDataset(Dataset):
         :return: List of Subset objects
         """
         lengths = self._calculate_split_lengths(lengths)
-        return_indices_sorted = [[length, i, []] for i, length in enumerate(lengths)]
+        return_indices_sorted = [[length, i, []]
+                                 for i, length in enumerate(lengths)]
         return_indices_sorted.sort(key=lambda x: x[0])
         num_buckets = len(return_indices_sorted)
 
-        non_empty_sequence_indices = [idx for idx in range(len(self.sequences)) if self.sequences[idx].get_num_images() > 0]
-        randomized_seq_indices = [non_empty_sequence_indices[idx] for idx in randperm(len(non_empty_sequence_indices), generator=generator)]
+        non_empty_sequence_indices = [idx for idx in range(
+            len(self.sequences)) if self.sequences[idx].get_num_images() > 0]
+        randomized_seq_indices = [non_empty_sequence_indices[idx] for idx in randperm(
+            len(non_empty_sequence_indices), generator=generator)]
 
         bucket_counter = 0
         seq_iter = 0
@@ -732,16 +843,20 @@ class DigitalTyphoonDataset(Dataset):
             if len(return_indices_sorted[bucket_counter][2]) < return_indices_sorted[bucket_counter][0]:
                 sequence_obj = self.sequences[randomized_seq_indices[seq_iter]]
                 if self.get_images_by_sequence:
-                    return_indices_sorted[bucket_counter][2].append(randomized_seq_indices[seq_iter])
+                    return_indices_sorted[bucket_counter][2].append(
+                        randomized_seq_indices[seq_iter])
                 else:
-                    sequence_idx_to_total = self.seq_indices_to_total_indices(sequence_obj)
-                    return_indices_sorted[bucket_counter][2].extend(sequence_idx_to_total)
+                    sequence_idx_to_total = self.seq_indices_to_total_indices(
+                        sequence_obj)
+                    return_indices_sorted[bucket_counter][2].extend(
+                        sequence_idx_to_total)
                 seq_iter += 1
             bucket_counter += 1
             if bucket_counter == num_buckets:
                 bucket_counter = 0
         return_indices_sorted.sort(key=lambda x: x[1])
-        return_list = [Subset(self, bucket_indices) for _, _, bucket_indices in return_indices_sorted]
+        return_list = [Subset(self, bucket_indices)
+                       for _, _, bucket_indices in return_indices_sorted]
         return return_list
 
     def _get_seq_from_seq_str(self, seq_str: str) -> DigitalTyphoonSequence:
@@ -783,7 +898,8 @@ class DigitalTyphoonDataset(Dataset):
         :return: a List of label strings or a single label string
         """
         if (type(label_strs) is list) or (type(label_strs) is tuple):
-            label_ray = np.array([image.value_from_string(label) for label in label_strs])
+            label_ray = np.array([image.value_from_string(label)
+                                 for label in label_strs])
             return label_ray
         else:
             label = image.value_from_string(label_strs)
@@ -794,12 +910,17 @@ class DigitalTyphoonDataset(Dataset):
         Clears all the sequences and other datastructures containing data.
         :return: None
         """
-        self.sequences: List[DigitalTyphoonSequence] = list()  # List of seq_str objects
-        self._sequence_str_to_seq_idx: Dict[str, int] = {}  # Sequence ID to idx in sequences array
-        self._image_idx_to_sequence: Dict[int, DigitalTyphoonSequence] = {}  # Image idx to what seq_str it belongs to
-        self._seq_str_to_first_total_idx: Dict[str, int] = {}  # Sequence string to the first total idx belonging to
-                                                               #  that seq_str
-        self.season_to_sequence_nums: OrderedDict[str, List[str]] = OrderedDict()
+        self.sequences: List[DigitalTyphoonSequence] = list(
+        )  # List of seq_str objects
+        # Sequence ID to idx in sequences array
+        self._sequence_str_to_seq_idx: Dict[str, int] = {}
+        # Image idx to what seq_str it belongs to
+        self._image_idx_to_sequence: Dict[int, DigitalTyphoonSequence] = {}
+        # Sequence string to the first total idx belonging to
+        self._seq_str_to_first_total_idx: Dict[str, int] = {}
+        #  that seq_str
+        self.season_to_sequence_nums: OrderedDict[str, List[str]] = OrderedDict(
+        )
 
         self.number_of_sequences = 0
         self.number_of_original_images = 0

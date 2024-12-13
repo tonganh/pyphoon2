@@ -51,7 +51,9 @@ else
   # rm "$ZIP_FILE"
 fi
 
-python3 -m unittest test_DigitalTyphoonDataset.TestDigitalTyphoonDataset
-python3 -m unittest test_DigitalTyphoonImage.TestDigitalTyphoonImage
-python3 -m unittest test_DigitalTyphoonSequence.TestDigitalTyphoonSequence
-python3 -m unittest test_DigitalTyphoonUtils.TestDigitalTyphoonUtils
+python3 -m unittest test_DigitalTyphoonDataset_MultiChannel.TestDigitalTyphoonDatasetMultiChannel > test_output.log 2>&1
+# python3 -m unittest test_DigitalTyphoonDataset_MultiChannel.TestDigitalTyphoonDatasetMultiChannel.test__initialize_and_populate_images_into_sequences
+
+# python3 -m unittest test_DigitalTyphoonImage.TestDigitalTyphoonImage
+# python3 -m unittest test_DigitalTyphoonSequence.TestDigitalTyphoonSequence
+# python3 -m unittest test_DigitalTyphoonUtils.TestDigitalTyphoonUtils
