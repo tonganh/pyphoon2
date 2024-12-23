@@ -487,11 +487,7 @@ class DigitalTyphoonDataset(Dataset):
         """
         with open(filepath, 'r') as f:
             data = json.load(f)
-        print("self.number_of_sequences before", self.number_of_sequences)
         self.number_of_sequences += len(data)
-        print("self.number_of_sequences after", self.number_of_sequences)
-
-        print("self.sequences length", len(self.sequences))
         for sequence_str, metadata in sorted(data.items()):
             self._read_one_seq_from_metadata(sequence_str, metadata)
 
@@ -649,7 +645,6 @@ class DigitalTyphoonDataset(Dataset):
         num_images = metadata_json['images'] if 'images' in metadata_json.keys(
         ) else metadata_json['frames']
         metadata_json['images'] = num_images
-        print("Line 654", len(self.sequences))
         self.sequences.append(DigitalTyphoonSequence(sequence_str,
                                                      seq_start_date.year,
                                                      num_images,
