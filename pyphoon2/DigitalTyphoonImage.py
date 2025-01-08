@@ -10,7 +10,7 @@ from pyphoon2.DigitalTyphoonUtils import TRACK_COLS
 
 class DigitalTyphoonImage:
     def __init__(self, image_filepath: str, track_entry: np.ndarray, sequence_id=None, load_imgs_into_mem=False,
-                 transform_func=None, spectrum='Infrared'):
+                 transform_func=None, spectrum='Infrared', image_filepaths=None):
         """
         Class for one image with metadata for the DigitalTyphoonDataset
 
@@ -30,11 +30,12 @@ class DigitalTyphoonImage:
         self.spectrum = spectrum
         self.transform_func = transform_func
 
-
         self.image_filepath = image_filepath
+        self.image_filepaths = image_filepaths
         self.image_array = None
         if image_filepath is not None and self.load_imgs_into_mem:
-            self.set_image_data(image_filepath, load_imgs_into_mem=self.load_imgs_into_mem)
+            self.set_image_data(
+                image_filepath, load_imgs_into_mem=self.load_imgs_into_mem)
 
         self.track_data = track_entry
         if track_entry is not None:
@@ -55,7 +56,6 @@ class DigitalTyphoonImage:
             return self.image_array
 
         image = self._get_h5_image_as_numpy(spectrum=open_spectrum)
-
         if self.transform_func is not None:
             image = self.transform_func(image)
 
@@ -283,18 +283,65 @@ class DigitalTyphoonImage:
 
         self.image_filepath = image_filepath
         if self.load_imgs_into_mem:
-            self.image(spectrum=spectrum)  # Load the image on instantiation if load_imgs_into_mem is set to True
+            # Load the image on instantiation if load_imgs_into_mem is set to True
+            self.image(spectrum=spectrum)
+
+    def set_image_datas(self, image_filepaths: List[str], load_imgs_into_mem=False, spectrum=None) -> None:
+        """
+        Sets the image file data
+
+        :param load_imgs_into_mem: bool, whether to load images into memory
+        :param spectrum: str, spectrum to open h5 images with
+        :param image_filepath: string to image
+        :return: None
+        """
+        self.load_imgs_into_mem = load_imgs_into_mem
+        if spectrum is None:
+            spectrum = self.spectrum
+
+        self.image_filepaths = image_filepaths
+        if self.load_imgs_into_mem:
+            # Load the image on instantiation if load_imgs_into_mem is set to True
+            self.image(spectrum=spectrum)
+
+    def get_multiimage_data(self, image_filepaths: List[str], load_imgs_into_mem=False, spectrum=None):
+        self.load_imgs_into_mem = load_imgs_into_mem
+        if spectrum is None:
+            spectrum = self.spectrum
+        self.image_filepaths = image_filepaths
+        if self.load_imgs_into_mem:
+            self.image(spectrum=spectrum)
 
     def _get_h5_image_as_numpy(self, spectrum=None) -> np.ndarray:
         """
         Given an h5 image filepath, open and return the image as a numpy array
-        
+
         :param spectrum: str, the spectrum of the image
         :return: np.ndarray, image as a numpy array with shape of the image dimensions
         """
         if spectrum is None:
             spectrum = self.spectrum
+        if self.image_filepath is not None and self.image_filepaths is not None:
+            raise ValueError(
+                'Both image_filepath and image_filepaths are set. Please only set one.')
 
-        with h5py.File(self.image_filepath, 'r') as h5f:
-            image = np.array(h5f.get(spectrum))
-        return image
+        IS_RENDER_MULTI_PATH = self.image_filepaths is not None
+        if IS_RENDER_MULTI_PATH:
+            images = []
+            # Iterate through each file in the list of file paths
+            for filepath in self.image_filepaths:
+                with h5py.File(filepath, 'r') as h5f:
+                    # Load the image for the specified spectrum
+                    image = np.array(h5f.get(spectrum))
+                    # Add the image to the list
+                    images.append(image)
+
+            # Stack images along a new axis to form a batch
+            # Shape: (num_files, *image_dimensions)
+            images = np.stack(images, axis=0)
+
+            return images
+        else:
+            with h5py.File(self.image_filepath, 'r') as h5f:
+                image = np.array(h5f.get(spectrum))
+            return image

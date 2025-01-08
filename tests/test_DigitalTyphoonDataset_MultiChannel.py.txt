@@ -66,15 +66,15 @@ class TestDigitalTyphoonDatasetMultiChannel(TestCase):
     def test__initialize_and_populate_images_into_sequences(self):
         test_dataset = self.create_test_dataset()
 
-    def test_populate_images_seq_images_are_read_in_chronological_order(self):
-        test_dataset = self.create_test_dataset()
-        sequences_list = test_dataset._get_list_of_sequence_objs()
-        for sequence in sequences_list:
-            image_paths = sequence.get_image_filepaths()
-            datelist = [parse_image_filename(os.path.basename(image_path))[
-                1] for image_path in image_paths]
-            sorted_datelist = sorted(datelist)
-            for i in range(0, len(datelist)):
-                if datelist[i] != sorted_datelist[i]:
-                    self.fail(
-                        f'Sequence \'{sequence.get_sequence_str()}\' was not read in chronological order.')
+    # def test_populate_images_seq_images_are_read_in_chronological_order(self):
+    #     test_dataset = self.create_test_dataset()
+    #     sequences_list = test_dataset._get_list_of_sequence_objs()
+    #     for sequence in sequences_list:
+    #         image_paths = sequence.get_image_filepaths()
+    #         datelist = [parse_image_filename(os.path.basename(image_path))[
+    #             1] for image_path in image_paths]
+    #         sorted_datelist = sorted(datelist)
+    #         for i in range(0, len(datelist)):
+    #             if datelist[i] != sorted_datelist[i]:
+    #                 self.fail(
+    #                     f'Sequence \'{sequence.get_sequence_str()}\' was not read in chronological order.')

@@ -10,7 +10,7 @@ from typing import List, Dict
 import pandas as pd
 
 from pyphoon2.DigitalTyphoonImage import DigitalTyphoonImage
-from pyphoon2.DigitalTyphoonUtils import parse_image_filename, is_image_file, TRACK_COLS
+from pyphoon2.DigitalTyphoonUtils import parse_image_filename, is_image_file, TRACK_COLS, parse_common_image_filename
 
 
 class DigitalTyphoonSequence:
@@ -82,7 +82,6 @@ class DigitalTyphoonSequence:
 
         if spectrum is None:
             spectrum = self.spectrum
-
         self.set_images_root_path(directory_path)
         for root, dirs, files in os.walk(directory_path, topdown=True):
             filepaths = [(file,) + parse_image_filename(file)
@@ -96,6 +95,56 @@ class DigitalTyphoonSequence:
                     if filter_func(self.datetime_to_image[file_date]):
                         self.images.append(self.datetime_to_image[file_date])
 
+        if self.verbose:
+            if not self.num_images_match_num_expected():
+                warnings.warn(f'The number of images ({len(self.images)}) does not match the '
+                              f'number of expected images ({self.num_original_images}) from metadata. If this is expected, ignore this warning.')
+
+            if len(self.images) < self.num_track_entries:
+                warnings.warn(
+                    f'Only {len(self.images)} of {self.num_track_entries} track entries have images.')
+
+    def process_seq_img_dirs_into_sequence(self, directory_paths: str,
+                                           common_image_names: List[str],
+                                           load_imgs_into_mem=False,
+                                           ignore_list=None,
+                                           spectrum=None,
+                                           filter_func: Callable[[DigitalTyphoonImage], bool] = lambda img: True) -> None:
+        for directory_path in directory_paths:
+            if not os.path.isdir(directory_path):
+                raise NotADirectoryError(
+                    f"{directory_path} is not a valid directory.")
+        if ignore_list is None:
+            ignore_list = set([])
+
+        if spectrum is None:
+            spectrum = self.spectrum
+        # * Pick the first directory_path in directory_paths to get some information
+        random_directory_path = directory_paths[0]
+        self.set_images_root_path(random_directory_path)
+        filepath_for_common_image_names = {}
+        for directory_path in directory_paths:
+            for root, dirs, files in os.walk(directory_path, topdown=True):
+                # Get all the files that contain the value in common_image_names
+                for common_image_name in common_image_names:
+                    if common_image_name not in filepath_for_common_image_names:
+                        filepath_for_common_image_names[common_image_name] = []
+                    for file in files:
+                        if common_image_name in file and is_image_file(file):
+                            path_of_file = os.path.join(root, file)
+                            filepath_for_common_image_names[common_image_name].append(
+                                path_of_file)
+        common_name_name_with_metadata = [(common_image_name,) + parse_common_image_filename(
+            common_image_name) for common_image_name in common_image_names]
+        common_name_name_with_metadata.sort(key=lambda x: x[2])
+        for common_image_name, file_sequence, common_image_date, _ in common_name_name_with_metadata:
+            if common_image_name not in ignore_list:
+                filepaths = filepath_for_common_image_names[common_image_name]
+                self.datetime_to_image[common_image_date].set_image_datas(
+                    image_filepaths=filepaths, load_imgs_into_mem=load_imgs_into_mem, spectrum=spectrum)
+                if filter_func(self.datetime_to_image[common_image_date]):
+                    self.images.append(
+                        self.datetime_to_image[common_image_date])
         if self.verbose:
             if not self.num_images_match_num_expected():
                 warnings.warn(f'The number of images ({len(self.images)}) does not match the '

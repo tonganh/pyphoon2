@@ -6,6 +6,7 @@ import numpy as np
 from datetime import datetime
 from collections import OrderedDict
 from typing import List, Sequence, Union, Optional, Dict
+import re
 
 import torch
 from torch import default_generator, randperm, Generator
@@ -59,7 +60,6 @@ class DigitalTyphoonDataset(Dataset):
                          take in said tuple, and return a tuple of (transformed image/sequence, transformed label)
         :param verbose: Print verbose program information
         """
-        print("Line 62")
         if not SPLIT_UNIT.has_value(split_dataset_by):
             raise ValueError(f'Split unit must one of the following\n'
                              f'    {[item.value for item in SPLIT_UNIT]}.\n'
@@ -217,17 +217,90 @@ class DigitalTyphoonDataset(Dataset):
         if not is_valid_input_multi_dirs:
             raise ValueError(
                 'Input directories are not of the same length. Please ensure that the number of image_dirs, metadata_dirs, and metadata_jsons are the same.')
-        self.process_metadata_files(metadata_jsons)
+        common_sequences = self.get_common_sequences_from_files(
+            metadata_jsons=metadata_jsons, metadata_dirs=metadata_dirs, image_dirs=image_dirs)
+        # * We only need to preprocess the metadata_jsons[0] because the common sequences are the same for all metadata_jsons
+        self.preprocess_metadata_json_with_common_sequences(
+            metadata_jsons[0], common_sequences)
         for i in range(len(image_dirs)):
-            prefix = f'{i}_'
             _verbose_print(
                 f'Initializing track data from: {metadata_dirs[i]}', self.verbose)
             self._populate_track_data_into_sequences(
-                metadata_dirs[i], prefix=prefix)
+                metadata_dirs[i], common_sequences=common_sequences)
 
             _verbose_print(
                 f'Initializing image_arrays from a specific image_dir: {image_dirs[i]}', self.verbose)
-            self._populate_images_into_sequences(image_dirs[i], prefix=prefix)
+        self._populate_images_into_sequences_from_multi_dirs(
+            root_image_dirs=image_dirs, common_sequences=common_sequences)
+
+    def _populate_images_into_sequences_from_multi_dirs(self, root_image_dirs: List[str] = None, common_sequences: List[str] = None):
+        """
+        Traverses the image directory and populates each of the images sequentially into their respective seq_str
+        objects.
+
+        :param image_dir: path to directory containing directory of typhoon images.
+        :return: None
+        """
+        load_into_mem = self.load_data_into_memory in {
+            LOAD_DATA.ONLY_IMG, LOAD_DATA.ALL_DATA}
+        common_img_names_with_sequence = {}
+
+        for common_sequence in common_sequences:
+            names_for_image_dir = {}
+            common_img_names_with_sequence[common_sequence] = []
+            for root_image_dir in root_image_dirs:
+                # Get list files in the image_dir/common_sequence
+                image_dir = root_image_dir+common_sequence
+                names = self.get_names_from_images_removed_channel_idx(
+                    image_dir)
+                # print(
+                #     f'The number of images in the folder {image_dir} is {len(names)}')
+                names_for_image_dir[root_image_dir] = names
+            common_names_for_this_sequence = set(
+                names_for_image_dir[root_image_dirs[0]])
+            for key in names_for_image_dir.keys():
+                common_names_for_this_sequence = common_names_for_this_sequence.intersection(
+                    names_for_image_dir[key])
+            common_img_names_with_sequence[common_sequence] = common_names_for_this_sequence
+        for common_sequence in common_sequences:
+            sequence_obj = self._get_seq_from_seq_str(common_sequence)
+            common_image_name_for_this_sequence = common_img_names_with_sequence[common_sequence]
+            directory_paths = [root_image_dir + common_sequence
+                               for root_image_dir in root_image_dirs]
+            sequence_obj.process_seq_img_dirs_into_sequence(
+                directory_paths=directory_paths,
+                common_image_names=common_image_name_for_this_sequence,
+                load_imgs_into_mem=load_into_mem,
+                ignore_list=self.ignore_list,
+                filter_func=self.filter,
+                spectrum=self.spectrum)
+
+    def get_names_from_images_removed_channel_idx(self, image_dir: str) -> List[str]:
+        names = []
+        for root, dirs, files in os.walk(image_dir, topdown=True):
+            for file in files:
+                name = self.get_name_image_remove_channel_idx(file)
+                names.append(name)
+        return names
+
+    def get_name_image_remove_channel_idx(self, image_name: str) -> str:
+        match = re.match(r"^(.*)-\d+\.h5$", image_name)
+        if match:
+            name = match.group(1)
+            return name
+        else:
+            return image_name
+
+    def preprocess_metadata_json_with_common_sequences(self, metadata_json: str, common_sequences: List[str]):
+        with open(metadata_json, 'r') as f:
+            data = json.load(f)
+        new_data = {}
+        for sequence_str, metadata in data.items():
+            if sequence_str in common_sequences:
+                new_data[sequence_str] = metadata
+        self.number_of_sequences += len(new_data)
+        for sequence_str, metadata in sorted(new_data.items()):
+            self._read_one_seq_from_metadata(sequence_str, metadata)
 
     def load_data_from_single_dir(self, metadata_json: str, metadata_dir: str, image_dir: str):
         self.process_metadata_file(metadata_json)
@@ -509,6 +582,75 @@ class DigitalTyphoonDataset(Dataset):
                 self._read_one_seq_from_metadata(sequence_str_unique, metadata)
             print("self.sequences", len(self.sequences))
 
+    def get_common_sequences_from_files(self, metadata_jsons: List[str], metadata_dirs: List[str], image_dirs: List[str]):
+        """
+        Reads and processes JSON metadata file's information into dataset.
+
+        :param filepath: path to metadata file
+        :return: metadata JSON object
+        """
+        common_sequences_from_metadata_jsons = self.get_common_sequences_from_metadata_files(
+            metadata_jsons)
+        common_sequences_from_metadata_dirs = self.get_common_sequences_from_metadata_dirs(
+            metadata_dirs)
+        common_sequences_from_image_dirs = self.get_common_sequences_from_image_dirs(
+            image_dirs)
+        # Get common sequences from all sources
+        common_sequences = common_sequences_from_metadata_jsons.intersection(
+            common_sequences_from_metadata_dirs).intersection(common_sequences_from_image_dirs)
+        return common_sequences
+
+    def get_common_sequences_from_metadata_files(self, metadata_jsons: List[str]):
+        """
+        Reads and processes JSON metadata file's information into dataset.
+
+        :param filepath: path to metadata file
+        :return: metadata JSON object
+        """
+        datas_sequences_information = {}
+        for filepath in metadata_jsons:
+            datas_sequences_information[filepath] = []
+            with open(filepath, 'r') as f:
+                data = json.load(f)
+            for sequence_str, metadata in sorted(data.items()):
+                datas_sequences_information[filepath].append(sequence_str)
+        # Get the common sequences for all keys in datas_sequences_information
+        common_sequences = set(datas_sequences_information[metadata_jsons[0]])
+        for key in datas_sequences_information.keys():
+            common_sequences = common_sequences.intersection(
+                datas_sequences_information[key])
+        return common_sequences
+
+    def get_common_sequences_from_metadata_dirs(self, metadata_dirs: List[str]):
+        data_sequences_information = {}
+        for metadata_dir in metadata_dirs:
+            data_sequences_information[metadata_dir] = []
+            for root, dirs, files in os.walk(metadata_dir, topdown=True):
+                for file in sorted(files):
+                    file_sequence = get_seq_str_from_track_filename(file)
+                    data_sequences_information[metadata_dir].append(
+                        file_sequence)
+        common_sequences = set(data_sequences_information[metadata_dirs[0]])
+        for key in data_sequences_information.keys():
+            common_sequences = common_sequences.intersection(
+                data_sequences_information[key])
+        return common_sequences
+
+    def get_common_sequences_from_image_dirs(self, image_dirs: List[str]):
+        data_sequences_information = {}
+        for image_dir in image_dirs:
+            data_sequences_information[image_dir] = []
+            for root, dirs, files in os.walk(image_dir, topdown=True):
+                for dir_name in sorted(dirs):
+                    seq_str = dir_name
+                    data_sequences_information[image_dir].append(seq_str)
+                    pass
+        common_sequences = set(data_sequences_information[image_dirs[0]])
+        for key in data_sequences_information.keys():
+            common_sequences = common_sequences.intersection(
+                data_sequences_information[key])
+        return common_sequences
+
     def get_seq_ids_from_season(self, season: int) -> List[str]:
         """
         Given a start season, give the sequence ID strings of all sequences that start in that season.
@@ -580,7 +722,7 @@ class DigitalTyphoonDataset(Dataset):
         """
         return self.sequences
 
-    def _populate_images_into_sequences(self, image_dir: str, prefix: str = None) -> None:
+    def _populate_images_into_sequences(self, image_dir: str) -> None:
         """
         Traverses the image directory and populates each of the images sequentially into their respective seq_str
         objects.
@@ -593,10 +735,7 @@ class DigitalTyphoonDataset(Dataset):
         for root, dirs, files in os.walk(image_dir, topdown=True):
             # Read sequences in chronological order, not necessary but convenient
             for dir_name in sorted(dirs):
-                seq_str = dir_name
-                if prefix:
-                    seq_str = f'{prefix}{seq_str}'
-                sequence_obj = self._get_seq_from_seq_str(seq_str)
+                sequence_obj = self._get_seq_from_seq_str(dir_name)
                 sequence_obj.process_seq_img_dir_into_sequence(root+dir_name, load_into_mem,
                                                                ignore_list=self.ignore_list,
                                                                filter_func=self.filter,
@@ -612,22 +751,23 @@ class DigitalTyphoonDataset(Dataset):
                     warnings.warn(f'Sequence {sequence.sequence_str} has only {sequence.get_num_images()} when '
                                   f'it should have {sequence.num_original_images}. If this is intended, ignore this warning.')
 
-    def _populate_track_data_into_sequences(self, metadata_dir: str, prefix: str = None) -> None:
+    def _populate_track_data_into_sequences(self, metadata_dir: str, common_sequences: List[str] = None) -> None:
         """
         Traverses the track data files and populates each into their respective seq_str objects
 
         :param metadata_dir: path to directory containing track data files
         :return: None
         """
+        NEED_FILTER_COMMON_SEQUENCES = common_sequences is not None
         for root, dirs, files in os.walk(metadata_dir, topdown=True):
             for file in sorted(files):
+                file_valid = True
                 file_sequence = get_seq_str_from_track_filename(file)
-                if prefix:
-                    file_sequence = f'{prefix}{file_sequence}'
-                if self.sequence_exists(file_sequence):
+                if NEED_FILTER_COMMON_SEQUENCES:
+                    file_valid = file_sequence in common_sequences
+                if self.sequence_exists(file_sequence) and file_valid:
                     self._get_seq_from_seq_str(
                         file_sequence).set_track_path(root + file)
-                    # if self.load_data_into_memory in {LOAD_DATA.ONLY_TRACK, LOAD_DATA.ALL_DATA}:
                     self._read_in_track_file_to_sequence(
                         file_sequence, root + file)
 

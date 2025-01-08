@@ -1,7 +1,5 @@
 from config_test import *
-from pyphoon2.DigitalTyphoonUtils import parse_image_filename
-from pyphoon2.DigitalTyphoonSequence import DigitalTyphoonSequence
-from pyphoon2.DigitalTyphoonDataset import DigitalTyphoonDataset
+
 import torch
 import numpy as np
 import os.path
@@ -12,7 +10,9 @@ import sys
 # Add the parent directory to the system path
 sys.path.insert(0, os.path.abspath(
     os.path.join(os.path.dirname(__file__), '..')))
-
+from pyphoon2.DigitalTyphoonUtils import parse_image_filename
+from pyphoon2.DigitalTyphoonSequence import DigitalTyphoonSequence
+from pyphoon2.DigitalTyphoonDataset import DigitalTyphoonDataset
 
 class TestDigitalTyphoonDataset(TestCase):
 
