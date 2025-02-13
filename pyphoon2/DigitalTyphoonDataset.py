@@ -219,17 +219,18 @@ class DigitalTyphoonDataset(Dataset):
                 'Input directories are not of the same length. Please ensure that the number of image_dirs, metadata_dirs, and metadata_jsons are the same.')
         common_sequences = self.get_common_sequences_from_files(
             metadata_jsons=metadata_jsons, metadata_dirs=metadata_dirs, image_dirs=image_dirs)
-        # * We only need to preprocess the metadata_jsons[0] because the common sequences are the same for all metadata_jsons
+        print("common_sequences", common_sequences)
+        # * We only need to preprocess the metadata_jsons[0] and metadata_dirs[0] because the common sequences are the same for all metadata_jsons/metadata_dirs
+        index_path_selected = 0
         self.preprocess_metadata_json_with_common_sequences(
-            metadata_jsons[0], common_sequences)
-        for i in range(len(image_dirs)):
-            _verbose_print(
-                f'Initializing track data from: {metadata_dirs[i]}', self.verbose)
-            self._populate_track_data_into_sequences(
-                metadata_dirs[i], common_sequences=common_sequences)
+            metadata_jsons[index_path_selected], common_sequences)
+        _verbose_print(
+            f'Initializing track data from: {metadata_dirs[index_path_selected]}', self.verbose)
+        self._populate_track_data_into_sequences(
+            metadata_dirs[index_path_selected], common_sequences=common_sequences)
 
-            _verbose_print(
-                f'Initializing image_arrays from a specific image_dir: {image_dirs[i]}', self.verbose)
+        _verbose_print(
+            f'Initializing image_arrays from a specific image_dir: {image_dirs[index_path_selected]}', self.verbose)
         self._populate_images_into_sequences_from_multi_dirs(
             root_image_dirs=image_dirs, common_sequences=common_sequences)
 
@@ -589,6 +590,8 @@ class DigitalTyphoonDataset(Dataset):
         :param filepath: path to metadata file
         :return: metadata JSON object
         """
+        self.assert_consistency_data_in_same_index(
+            metadata_jsons=metadata_jsons, metadata_dirs=metadata_dirs, image_dirs=image_dirs)
         common_sequences_from_metadata_jsons = self.get_common_sequences_from_metadata_files(
             metadata_jsons)
         common_sequences_from_metadata_dirs = self.get_common_sequences_from_metadata_dirs(
@@ -599,6 +602,26 @@ class DigitalTyphoonDataset(Dataset):
         common_sequences = common_sequences_from_metadata_jsons.intersection(
             common_sequences_from_metadata_dirs).intersection(common_sequences_from_image_dirs)
         return common_sequences
+
+    def assert_consistency_data_in_same_index(self, metadata_jsons: List[str], metadata_dirs: List[str], image_dirs: List[str]):
+        length_metadata_jsons = len(metadata_jsons)
+        for i in range(length_metadata_jsons):
+            # Create a new metadata_jsons_checking array, it contains only the data of this index
+            metadata_jsons_checking = [metadata_jsons[i]]
+            metadata_dirs_checking = [metadata_dirs[i]]
+            image_dirs_checking = [image_dirs[i]]
+            common_sequences_from_metadata_jsons = self.get_common_sequences_from_metadata_files(
+                metadata_jsons_checking)
+            common_sequences_from_metadata_dirs = self.get_common_sequences_from_metadata_dirs(
+                metadata_dirs_checking)
+            common_sequences_from_image_dirs = self.get_common_sequences_from_image_dirs(
+                image_dirs_checking)
+            # Make sure common_sequences_from_image_dirs, common_sequences_from_metadata_dirs, common_sequences_from_metadata_jsons are the same
+            assert common_sequences_from_metadata_jsons == common_sequences_from_metadata_dirs
+            assert common_sequences_from_metadata_dirs == common_sequences_from_image_dirs
+            assert common_sequences_from_image_dirs == common_sequences_from_metadata_jsons
+
+        pass
 
     def get_common_sequences_from_metadata_files(self, metadata_jsons: List[str]):
         """

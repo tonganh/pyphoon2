@@ -10,7 +10,7 @@ from pyphoon2.DigitalTyphoonUtils import TRACK_COLS
 
 class DigitalTyphoonImage:
     def __init__(self, image_filepath: str, track_entry: np.ndarray, sequence_id=None, load_imgs_into_mem=False,
-                 transform_func=None, spectrum='Infrared', image_filepaths=None):
+                 transform_func=None, spectrum=None, image_filepaths=None):
         """
         Class for one image with metadata for the DigitalTyphoonDataset
 
@@ -319,19 +319,22 @@ class DigitalTyphoonImage:
         :param spectrum: str, the spectrum of the image
         :return: np.ndarray, image as a numpy array with shape of the image dimensions
         """
+        IS_RENDER_MULTI_PATH = self.image_filepaths is not None
         if spectrum is None:
             spectrum = self.spectrum
         if self.image_filepath is not None and self.image_filepaths is not None:
             raise ValueError(
                 'Both image_filepath and image_filepaths are set. Please only set one.')
 
-        IS_RENDER_MULTI_PATH = self.image_filepaths is not None
         if IS_RENDER_MULTI_PATH:
             images = []
             # Iterate through each file in the list of file paths
             for filepath in self.image_filepaths:
                 with h5py.File(filepath, 'r') as h5f:
                     # Load the image for the specified spectrum
+                    spectrum_for_this_image = spectrum
+                    if spectrum_for_this_image is None:
+                        spectrum_for_this_image = list(h5f.keys())[0]
                     image = np.array(h5f.get(spectrum))
                     # Add the image to the list
                     images.append(image)
@@ -343,5 +346,7 @@ class DigitalTyphoonImage:
             return images
         else:
             with h5py.File(self.image_filepath, 'r') as h5f:
+                if spectrum is None:
+                    spectrum = list(h5f.keys())[0]
                 image = np.array(h5f.get(spectrum))
             return image
