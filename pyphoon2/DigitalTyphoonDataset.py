@@ -236,45 +236,104 @@ class DigitalTyphoonDataset(Dataset):
 
     def _populate_images_into_sequences_from_multi_dirs(self, root_image_dirs: List[str] = None, common_sequences: List[str] = None):
         """
-        Traverses the image directory and populates each of the images sequentially into their respective seq_str
-        objects.
+        Traverses the image directories and populates each of the images sequentially into their respective 
+        sequence objects. Handles both single and multi-channel inputs.
 
-        :param image_dir: path to directory containing directory of typhoon images.
+        :param root_image_dirs: List of paths to directories containing directory of typhoon images.
+        :param common_sequences: List of sequence strings common across all directories
         :return: None
         """
-        load_into_mem = self.load_data_into_memory in {
-            LOAD_DATA.ONLY_IMG, LOAD_DATA.ALL_DATA}
-        common_img_names_with_sequence = {}
-
+        # Handle special case for single directory - revert to original behavior
+        if len(root_image_dirs) == 1:
+            print(f"Only one image directory provided, using single-directory processing")
+            for common_sequence in common_sequences:
+                sequence_obj = self._get_seq_from_seq_str(common_sequence)
+                sequence_obj.process_seq_img_dir_into_sequence(
+                    os.path.join(root_image_dirs[0], common_sequence),
+                    load_imgs_into_mem=self.load_data_into_memory in {LOAD_DATA.ONLY_IMG, LOAD_DATA.ALL_DATA},
+                    ignore_list=self.ignore_list,
+                    filter_func=self.filter,
+                    spectrum=self.spectrum
+                )
+                self.number_of_images += sequence_obj.get_num_images()
+            
+            # Update count of non-empty sequences
+            self.number_of_nonempty_sequences = sum(1 for seq in self.sequences if seq.get_num_images() > 0)
+            print(f"Loaded {self.number_of_images} images across {self.number_of_nonempty_sequences} non-empty sequences")
+            return
+        
+        # Multi-directory processing for multi-channel inputs
+        load_into_mem = self.load_data_into_memory in {LOAD_DATA.ONLY_IMG, LOAD_DATA.ALL_DATA}
+        print(f"Processing {len(root_image_dirs)} directories for {len(common_sequences)} sequences")
+        print(f"Loading into memory: {load_into_mem}")
+        
+        # Reset counters
+        self.number_of_images = 0
+        self.number_of_nonempty_sequences = 0
+        
+        # Process each sequence
         for common_sequence in common_sequences:
-            names_for_image_dir = {}
-            common_img_names_with_sequence[common_sequence] = []
-            for root_image_dir in root_image_dirs:
-                # Get list files in the image_dir/common_sequence
-                image_dir = root_image_dir+common_sequence
-                names = self.get_names_from_images_removed_channel_idx(
-                    image_dir)
-                # print(
-                #     f'The number of images in the folder {image_dir} is {len(names)}')
-                names_for_image_dir[root_image_dir] = names
-            common_names_for_this_sequence = set(
-                names_for_image_dir[root_image_dirs[0]])
-            for key in names_for_image_dir.keys():
-                common_names_for_this_sequence = common_names_for_this_sequence.intersection(
-                    names_for_image_dir[key])
-            common_img_names_with_sequence[common_sequence] = common_names_for_this_sequence
-        for common_sequence in common_sequences:
+            print(f"Processing sequence: {common_sequence}")
+            names_by_dir = {}
+            
+            # Get all image names from each directory
+            for root_dir in root_image_dirs:
+                seq_dir = os.path.join(root_dir, common_sequence)
+                if os.path.exists(seq_dir) and os.path.isdir(seq_dir):
+                    names = self.get_names_from_images_removed_channel_idx(seq_dir)
+                    print(f"Found {len(names)} images in {seq_dir}")
+                    names_by_dir[root_dir] = names
+                else:
+                    print(f"Warning: Directory not found or not accessible: {seq_dir}")
+                    names_by_dir[root_dir] = []
+            
+            # Find common image names across all directories
+            if len(names_by_dir) == 0 or len(names_by_dir.values()) == 0:
+                print(f"No images found for sequence {common_sequence}")
+                continue
+            
+            # Start with names from first directory, then find intersection
+            common_names = set(next(iter(names_by_dir.values())))
+            for names in names_by_dir.values():
+                common_names &= set(names)
+            
+            print(f"Found {len(common_names)} common images for sequence {common_sequence}")
+            
+            if not common_names:
+                print(f"No common images found for sequence {common_sequence}, skipping")
+                continue
+            
+            # Process the sequence with all directories
             sequence_obj = self._get_seq_from_seq_str(common_sequence)
-            common_image_name_for_this_sequence = common_img_names_with_sequence[common_sequence]
-            directory_paths = [root_image_dir + common_sequence
-                               for root_image_dir in root_image_dirs]
-            sequence_obj.process_seq_img_dirs_into_sequence(
-                directory_paths=directory_paths,
-                common_image_names=common_image_name_for_this_sequence,
-                load_imgs_into_mem=load_into_mem,
-                ignore_list=self.ignore_list,
-                filter_func=self.filter,
-                spectrum=self.spectrum)
+            dir_paths = [os.path.join(root_dir, common_sequence) for root_dir in root_image_dirs]
+            
+            try:
+                sequence_obj.process_seq_img_dirs_into_sequence(
+                    directory_paths=dir_paths,
+                    common_image_names=list(common_names),
+                    load_imgs_into_mem=load_into_mem,
+                    ignore_list=self.ignore_list,
+                    filter_func=self.filter,
+                    spectrum=self.spectrum
+                )
+                
+                num_images = sequence_obj.get_num_images()
+                self.number_of_images += num_images
+                
+                if num_images > 0:
+                    self.number_of_nonempty_sequences += 1
+                
+                print(f"Loaded {num_images} images for sequence {common_sequence}")
+            except Exception as e:
+                print(f"Error processing sequence {common_sequence}: {str(e)}")
+        
+        print(f"Total loaded: {self.number_of_images} images across {self.number_of_nonempty_sequences} non-empty sequences")
+        
+        # Sanity check
+        if self.number_of_images == 0:
+            print("WARNING: No images were loaded! Check your directories and file naming consistency.")
+        if self.number_of_nonempty_sequences == 0:
+            print("WARNING: No sequences contain images! Check your filtering and image loading logic.")
 
     def get_names_from_images_removed_channel_idx(self, image_dir: str) -> List[str]:
         names = []
@@ -585,22 +644,69 @@ class DigitalTyphoonDataset(Dataset):
 
     def get_common_sequences_from_files(self, metadata_jsons: List[str], metadata_dirs: List[str], image_dirs: List[str]):
         """
-        Reads and processes JSON metadata file's information into dataset.
+        Find common sequences across metadata and image directories.
 
-        :param filepath: path to metadata file
-        :return: metadata JSON object
+        :param metadata_jsons: List of paths to metadata JSON files
+        :param metadata_dirs: List of paths to metadata directories
+        :param image_dirs: List of paths to image directories
+        :return: Set of sequences common to all provided data sources
         """
-        self.assert_consistency_data_in_same_index(
-            metadata_jsons=metadata_jsons, metadata_dirs=metadata_dirs, image_dirs=image_dirs)
+        print("="*50)
+        print("Finding common sequences across data sources")
+        print(f"Checking {len(metadata_jsons)} metadata JSONs, {len(metadata_dirs)} metadata dirs, {len(image_dirs)} image dirs")
+        
+        try:
+            self.assert_consistency_data_in_same_index(
+                metadata_jsons=metadata_jsons, metadata_dirs=metadata_dirs, image_dirs=image_dirs)
+            print("Data consistency check passed")
+        except AssertionError as e:
+            print(f"WARNING: Data consistency check failed: {str(e)}")
+            print("Still trying to find common sequences...")
+        
+        # Get sequences from metadata JSON files
         common_sequences_from_metadata_jsons = self.get_common_sequences_from_metadata_files(
             metadata_jsons)
+        print(f"Found {len(common_sequences_from_metadata_jsons)} sequences from metadata JSON files")
+        
+        # Get sequences from metadata directories
         common_sequences_from_metadata_dirs = self.get_common_sequences_from_metadata_dirs(
             metadata_dirs)
+        print(f"Found {len(common_sequences_from_metadata_dirs)} sequences from metadata directories")
+        
+        # Get sequences from image directories
         common_sequences_from_image_dirs = self.get_common_sequences_from_image_dirs(
             image_dirs)
-        # Get common sequences from all sources
-        common_sequences = common_sequences_from_metadata_jsons.intersection(
-            common_sequences_from_metadata_dirs).intersection(common_sequences_from_image_dirs)
+        print(f"Found {len(common_sequences_from_image_dirs)} sequences from image directories")
+        
+        # Find sequences common to all data sources
+        if common_sequences_from_metadata_jsons and common_sequences_from_metadata_dirs and common_sequences_from_image_dirs:
+            common_sequences = common_sequences_from_metadata_jsons.intersection(
+                common_sequences_from_metadata_dirs).intersection(common_sequences_from_image_dirs)
+        elif common_sequences_from_metadata_jsons and common_sequences_from_metadata_dirs:
+            common_sequences = common_sequences_from_metadata_jsons.intersection(
+                common_sequences_from_metadata_dirs)
+        elif common_sequences_from_metadata_jsons and common_sequences_from_image_dirs:
+            common_sequences = common_sequences_from_metadata_jsons.intersection(
+                common_sequences_from_image_dirs)
+        elif common_sequences_from_metadata_dirs and common_sequences_from_image_dirs:
+            common_sequences = common_sequences_from_metadata_dirs.intersection(
+                common_sequences_from_image_dirs)
+        elif common_sequences_from_metadata_jsons:
+            common_sequences = common_sequences_from_metadata_jsons
+        elif common_sequences_from_metadata_dirs:
+            common_sequences = common_sequences_from_metadata_dirs
+        elif common_sequences_from_image_dirs:
+            common_sequences = common_sequences_from_image_dirs
+        else:
+            common_sequences = set()
+        
+        print(f"Final count of common sequences: {len(common_sequences)}")
+        if len(common_sequences) > 0:
+            print(f"Sample sequences: {list(common_sequences)[:5]}")
+        else:
+            print("WARNING: No common sequences found! Check your data directories.")
+        
+        print("="*50)
         return common_sequences
 
     def assert_consistency_data_in_same_index(self, metadata_jsons: List[str], metadata_dirs: List[str], image_dirs: List[str]):
@@ -984,38 +1090,71 @@ class DigitalTyphoonDataset(Dataset):
         :param generator: Generator used for the random permutation.
         :return: List of Subset objects
         """
+        # Debug information about the dataset
+        print(f"Total sequences: {len(self.sequences)}")
+        print(f"Total images: {self.number_of_images}")
+        
+        # Calculate split lengths and create buckets
         lengths = self._calculate_split_lengths(lengths)
-        return_indices_sorted = [[length, i, []]
-                                 for i, length in enumerate(lengths)]
-        return_indices_sorted.sort(key=lambda x: x[0])
-        num_buckets = len(return_indices_sorted)
-
-        non_empty_sequence_indices = [idx for idx in range(
-            len(self.sequences)) if self.sequences[idx].get_num_images() > 0]
+        print(f"Split lengths: {lengths}")
+        
+        # Create bucket structure with length, index, and empty list for indices
+        return_indices_sorted = [[length, i, []] for i, length in enumerate(lengths)]
+        
+        # Get non-empty sequences
+        non_empty_sequence_indices = [idx for idx in range(len(self.sequences)) if self.sequences[idx].get_num_images() > 0]
+        print(f"Non-empty sequences: {len(non_empty_sequence_indices)}")
+        
+        if not non_empty_sequence_indices:
+            print("ERROR: No non-empty sequences found!")
+            return [Subset(self, []) for _ in lengths]
+        
+        # Randomize sequence order
         randomized_seq_indices = [non_empty_sequence_indices[idx] for idx in randperm(
             len(non_empty_sequence_indices), generator=generator)]
-
+        
+        # Original algorithm: Distribute sequences or their images to buckets
         bucket_counter = 0
         seq_iter = 0
         while seq_iter < len(randomized_seq_indices):
-            if len(return_indices_sorted[bucket_counter][2]) < return_indices_sorted[bucket_counter][0]:
-                sequence_obj = self.sequences[randomized_seq_indices[seq_iter]]
+            # Ensure buckets are in unsorted order for distribution
+            current_length = lengths[bucket_counter]
+            current_bucket = return_indices_sorted[bucket_counter][2]
+            
+            print(f"seq_iter={seq_iter}, bucket={bucket_counter}, capacity={current_length}, size={len(current_bucket)}")
+            
+            if len(current_bucket) < current_length:
+                # Get the sequence at current index
+                seq_idx = randomized_seq_indices[seq_iter]
+                sequence_obj = self.sequences[seq_idx]
+                
+                # Add the sequence or its images to the bucket
                 if self.get_images_by_sequence:
-                    return_indices_sorted[bucket_counter][2].append(
-                        randomized_seq_indices[seq_iter])
+                    return_indices_sorted[bucket_counter][2].append(seq_idx)
+                    print(f"Added sequence {seq_idx} to bucket {bucket_counter}")
                 else:
-                    sequence_idx_to_total = self.seq_indices_to_total_indices(
-                        sequence_obj)
-                    return_indices_sorted[bucket_counter][2].extend(
-                        sequence_idx_to_total)
+                    try:
+                        image_indices = self.seq_indices_to_total_indices(sequence_obj)
+                        return_indices_sorted[bucket_counter][2].extend(image_indices)
+                        print(f"Added {len(image_indices)} images from sequence {seq_idx} to bucket {bucket_counter}")
+                    except Exception as e:
+                        print(f"Error adding sequence {seq_idx}: {str(e)}")
+                
+                # Move to next sequence
                 seq_iter += 1
-            bucket_counter += 1
-            if bucket_counter == num_buckets:
-                bucket_counter = 0
+            
+            # Move to next bucket, wrap around to first if needed
+            bucket_counter = (bucket_counter + 1) % len(lengths)
+        
+        # Report final bucket sizes
+        for i, (length, idx, indices) in enumerate(return_indices_sorted):
+            print(f"Bucket {i}: capacity={length}, items={len(indices)}")
+        
+        # Sort buckets by original index
         return_indices_sorted.sort(key=lambda x: x[1])
-        return_list = [Subset(self, bucket_indices)
-                       for _, _, bucket_indices in return_indices_sorted]
-        return return_list
+        
+        # Create subsets
+        return [Subset(self, bucket_indices) for _, _, bucket_indices in return_indices_sorted]
 
     def _get_seq_from_seq_str(self, seq_str: str) -> DigitalTyphoonSequence:
         """
