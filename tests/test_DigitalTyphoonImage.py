@@ -96,7 +96,8 @@ class TestDigitalTyphoonImage(TestCase):
 
     def test_initialization_with_no_spectrum(self):
         """Test successful initialization with valid data."""
-        image_file_path_modified = self._create_modified_h5_file()
+        # image_file_path_modified = self._create_modified_h5_file()
+        image_file_path_modified = '/app/197830/1978120103-197830-GMS1-1.h5'
         test_image_no_specific_spectrum = DigitalTyphoonImage(
             image_file_path_modified,
             self.track_entry,
@@ -105,4 +106,4 @@ class TestDigitalTyphoonImage(TestCase):
         self.assertIsInstance(
             test_image_no_specific_spectrum, DigitalTyphoonImage)
         # remove image_file_path_modified
-        os.remove(image_file_path_modified)
+        # os.remove(image_file_path_modified)
