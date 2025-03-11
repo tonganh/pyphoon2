@@ -195,7 +195,6 @@ class TestDigitalTyphoonDataset(TestCase):
             transform_func=lambda img: np.ones(img.shape), spectrum='Infrared')
 
         read_in_image = test_dataset._get_image_from_idx_as_numpy(4)
-        breakpoint()
         self.assertTrue(np.array_equal(np.ones(should_be_shape), read_in_image))
 
     def test_random_split_by_image_random_produces_nonidentical_indices(self):
