@@ -65,33 +65,39 @@ class DigitalTyphoonImage:
         Gets this image as a numpy array.
 
         If an image is already loaded, it is returned. Otherwise, the image is loaded from the h5 file.
-        
+
+        If `self.transform_func` is not None, it is applied before returning the image.
+
         :return: this image as a numpy array
         """
         if self.image_array is not None:
-            return self.image_array
-        
-        # Load the image from file
-        if self.image_filepath is None or self.image_filepath == "":
-            # Only return an empty array if the image path is invalid
-            return np.array([], dtype=np.float64)
-            
-        try:
-            image_array = self._get_h5_image_as_numpy(self.image_filepath, self.spectrum)
-            # Only filter out empty arrays if they came from a valid path
-            if image_array.size > 0:
-                return image_array
-            
-            # If we have a valid path but got an empty array, this is unusual
-            # and should be reported (original behavior)
-            if hasattr(self, 'verbose') and self.verbose:
-                print(f"Warning: Image loaded from {self.image_filepath} is empty")
-            return image_array
-                
-        except Exception as e:
-            if hasattr(self, 'verbose') and self.verbose:
-                print(f"Error loading image from {self.image_filepath}: {str(e)}")
-            return np.array([], dtype=np.float64)
+            image_array = self.image_array
+        else:
+            # Load the image from file
+            if not self.image_filepath:
+                return np.array([], dtype=np.float64)
+
+            try:
+                image_array = self._get_h5_image_as_numpy(self.image_filepath, self.spectrum)
+
+                if image_array.size == 0:
+                    if hasattr(self, 'verbose') and self.verbose:
+                        print(f"Warning: Image loaded from {self.image_filepath} is empty")
+                    return image_array
+            except Exception as e:
+                if hasattr(self, 'verbose') and self.verbose:
+                    print(f"Error loading image from {self.image_filepath}: {str(e)}")
+                return np.array([], dtype=np.float64)
+
+        # Apply transform function if defined
+        if self.transform_func is not None:
+            try:
+                image_array = self.transform_func(image_array)
+            except Exception as e:
+                if hasattr(self, 'verbose') and self.verbose:
+                    print(f"Error applying transform function: {str(e)}")
+
+        return image_array
 
     def sequence_id(self) -> str:
         """

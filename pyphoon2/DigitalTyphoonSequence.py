@@ -402,7 +402,7 @@ class DigitalTyphoonSequence:
                 # Return a minimal DigitalTyphoonImage object
                 return DigitalTyphoonImage("", np.array([]), self.get_sequence_str(), 
                                           spectrum=spectrum or self.spectrum, 
-                                          verbose=self.verbose)
+                                          verbose=self.verbose, transform_func=self.transform_func)
             
             # Get the existing image
             image = self.images[idx]
@@ -429,7 +429,7 @@ class DigitalTyphoonSequence:
             # Return a minimal DigitalTyphoonImage object
             return DigitalTyphoonImage("", np.array([]), self.get_sequence_str(), 
                                       spectrum=spectrum or self.spectrum,
-                                      verbose=self.verbose)
+                                      verbose=self.verbose, transform_func=self.transform_func)
 
     def get_image_at_idx_as_numpy(self, idx: int, spectrum=None) -> np.ndarray:
         """
@@ -541,7 +541,8 @@ class DigitalTyphoonSequence:
             image = DigitalTyphoonImage(
                 image_filepath, track_entry, self.get_sequence_str(), 
                 spectrum=self.spectrum, image_filepaths=image_filepaths,
-                verbose=verbose
+                verbose=verbose,
+                transform_func=self.transform_func
             )
             self.images.append(image)
             
