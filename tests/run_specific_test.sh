@@ -55,7 +55,7 @@ echo "Starting the test..."
 # python -m unittest test_DigitalTyphoonDataset_MultiChannel.TestDigitalTyphoonDatasetMultiChannel
 # python3 -m unittest test_DigitalTyphoonDataset_MultiChannel.TestDigitalTyphoonDatasetMultiChannel.test__initialize_and_populate_images_into_sequences
 
-# python3 -m unittest test_DigitalTyphoonDataset.TestDigitalTyphoonDataset.test__initialize_and_populate_images_into_sequences
-python3 -m unittest test_DigitalTyphoonImage.TestDigitalTyphoonImage.test_initialization_with_no_spectrum
+python3 -m unittest test_DigitalTyphoonDataset.TestDigitalTyphoonDataset.test__initialize_and_populate_images_into_sequences
+# python3 -m unittest test_DigitalTyphoonImage.TestDigitalTyphoonImage.test_initialization_with_no_spectrum
 # python3 -m unittest test_DigitalTyphoonSequence.TestDigitalTyphoonSequence
 # python3 -m unittest test_DigitalTyphoonUtils.TestDigitalTyphoonUtils
