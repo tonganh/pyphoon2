@@ -294,8 +294,8 @@ class DigitalTyphoonImage:
                 return 0.0
                 
             # Check if we can access LONG.value
-            if hasattr(TRACK_COLS, 'LONG') and hasattr(TRACK_COLS.LONG, 'value'):
-                long_idx = TRACK_COLS.LONG.value
+            if hasattr(TRACK_COLS, 'LNG') and hasattr(TRACK_COLS.LNG, 'value'):
+                long_idx = TRACK_COLS.LNG.value
                 if long_idx < len(self.track_data):
                     # Try to convert the value to float
                     try:

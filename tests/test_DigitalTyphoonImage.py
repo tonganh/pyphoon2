@@ -72,7 +72,6 @@ class TestDigitalTyphoonImage(TestCase):
         self.assertEqual(self.test_image.day(), 7)
         self.assertEqual(self.test_image.grade(), 2)
         self.assertEqual(self.test_image.lat(), 7.80)
-        breakpoint()
         self.assertEqual(self.test_image.long(), 133.30)
         self.assertEqual(self.test_image.pressure(), 1004.0)
         self.assertEqual(self.test_image.wind(), 0.0)

@@ -176,6 +176,7 @@ class TestDigitalTyphoonSequence(TestCase):
                        285.0799629800007, 286.7644375372904, 283.8272408836852]
 
         for i in range(len(first_values)):
+            breakpoint()
             if read_in_image[0][i] != first_values[i]:
                 self.fail(
                     f'Value produced was {read_in_image[0][i]}. Should be {first_values[i]}')

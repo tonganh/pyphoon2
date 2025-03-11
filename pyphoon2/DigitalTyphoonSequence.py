@@ -81,10 +81,6 @@ class DigitalTyphoonSequence:
         if spectrum is None:
             spectrum = self.spectrum
             
-        # Use self.filter_func if filter_func parameter is None
-        if filter_func is None:
-            filter_func = self.filter_func
-            
         # Ensure filter_func is callable
         if filter_func is None or not callable(filter_func):
             if self.verbose:
@@ -733,20 +729,6 @@ class DigitalTyphoonSequence:
                     spectrum=self.spectrum, image_filepaths=abs_image_filepaths,
                     verbose=verbose, transform_func=self.transform_func
                 )
-            
-            # Apply filter_func if it exists
-            if self.filter_func is not None and callable(self.filter_func):
-                try:
-                    if not self.filter_func(image):
-                        if self.verbose or verbose:
-                            print(f"Image {filename} filtered out by filter_func")
-                        return
-                except Exception as e:
-                    if self.verbose or verbose:
-                        print(f"Error applying filter_func to image {filename}: {str(e)}")
-                    # Skip this image if filter fails
-                    return
-                    
             # If it passes filtering, add to images list
             self.images.append(image)
             
