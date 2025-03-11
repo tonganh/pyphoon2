@@ -42,8 +42,7 @@ class TestDigitalTyphoonImage(TestCase):
     def test_initialization_load_image_into_memory_should_fail(self):
         """Test that initializing with a nonexistent file raises FileNotFoundError."""
         with self.assertRaises(FileNotFoundError):
-            DigitalTyphoonImage('nonexistent/file',
-                                self.track_entry, load_imgs_into_mem=True)
+            DigitalTyphoonImage('nonexistent/file',self.track_entry, load_imgs_into_mem=True)
 
     def test_image_loading(self):
         """Test that image is loaded correctly and values match expectations."""
@@ -73,6 +72,7 @@ class TestDigitalTyphoonImage(TestCase):
         self.assertEqual(self.test_image.day(), 7)
         self.assertEqual(self.test_image.grade(), 2)
         self.assertEqual(self.test_image.lat(), 7.80)
+        breakpoint()
         self.assertEqual(self.test_image.long(), 133.30)
         self.assertEqual(self.test_image.pressure(), 1004.0)
         self.assertEqual(self.test_image.wind(), 0.0)

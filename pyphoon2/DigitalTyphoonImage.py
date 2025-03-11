@@ -35,6 +35,11 @@ class DigitalTyphoonImage:
         self.image_filepath = image_filepath
         self.image_filepaths = image_filepaths
         self.image_array = None
+
+        if self.image_filepath:
+            # Check if the image file exists
+            if not os.path.exists(self.image_filepath):
+                raise FileNotFoundError(f"Image file {self.image_filepath} does not exist")
         
         # Initialize track_data as empty array if None is provided
         if track_data is None:
@@ -328,7 +333,35 @@ class DigitalTyphoonImage:
 
         :return: float
         """
-        return float(self.track_data[TRACK_COLS.WIND.value])
+        try:
+            if self.track_data is None or len(self.track_data) == 0:
+                return 0.0
+                
+            # Check if we can access WIND.value
+            if hasattr(TRACK_COLS, 'WIND') and hasattr(TRACK_COLS.WIND, 'value'):
+                wind_idx = TRACK_COLS.WIND.value
+                if wind_idx < len(self.track_data):
+                    # Try to convert the value to float
+                    try:
+                        return float(self.track_data[wind_idx])
+                    except (ValueError, TypeError):
+                        # If conversion fails, return default
+                        if self.verbose:
+                            print(f"Warning: Could not convert wind value '{self.track_data[wind_idx]}' to float")
+                        return 0.0
+            
+            # Fallback to checking if track_data has keys
+            if hasattr(self.track_data, 'keys') and 'wind' in self.track_data:
+                try:
+                    return float(self.track_data['wind'])
+                except (ValueError, TypeError):
+                    pass
+                    
+            return 0.0
+        except Exception as e:
+            if self.verbose:
+                print(f"Error getting wind speed: {str(e)}")
+            return 0.0
 
     def dir50(self) -> float:
         """
@@ -336,7 +369,24 @@ class DigitalTyphoonImage:
 
         :return: float
         """
-        return float(self.track_data[TRACK_COLS.DIR50.value])
+        try:
+            if self.track_data is None or len(self.track_data) == 0:
+                return 0.0
+                
+            if hasattr(TRACK_COLS, 'DIR50') and hasattr(TRACK_COLS.DIR50, 'value'):
+                idx = TRACK_COLS.DIR50.value
+                if idx < len(self.track_data):
+                    try:
+                        return float(self.track_data[idx])
+                    except (ValueError, TypeError):
+                        if self.verbose:
+                            print(f"Warning: Could not convert DIR50 value to float")
+                        return 0.0
+            return 0.0
+        except Exception as e:
+            if self.verbose:
+                print(f"Error getting DIR50: {str(e)}")
+            return 0.0
 
     def long50(self) -> float:
         """
@@ -344,7 +394,24 @@ class DigitalTyphoonImage:
 
         :return: float
         """
-        return float(self.track_data[TRACK_COLS.LONG50.value])
+        try:
+            if self.track_data is None or len(self.track_data) == 0:
+                return 0.0
+                
+            if hasattr(TRACK_COLS, 'LONG50') and hasattr(TRACK_COLS.LONG50, 'value'):
+                idx = TRACK_COLS.LONG50.value
+                if idx < len(self.track_data):
+                    try:
+                        return float(self.track_data[idx])
+                    except (ValueError, TypeError):
+                        if self.verbose:
+                            print(f"Warning: Could not convert LONG50 value to float")
+                        return 0.0
+            return 0.0
+        except Exception as e:
+            if self.verbose:
+                print(f"Error getting LONG50: {str(e)}")
+            return 0.0
 
     def short50(self) -> float:
         """
@@ -352,7 +419,24 @@ class DigitalTyphoonImage:
 
         :return: float
         """
-        return float(self.track_data[TRACK_COLS.SHORT50.value])
+        try:
+            if self.track_data is None or len(self.track_data) == 0:
+                return 0.0
+                
+            if hasattr(TRACK_COLS, 'SHORT50') and hasattr(TRACK_COLS.SHORT50, 'value'):
+                idx = TRACK_COLS.SHORT50.value
+                if idx < len(self.track_data):
+                    try:
+                        return float(self.track_data[idx])
+                    except (ValueError, TypeError):
+                        if self.verbose:
+                            print(f"Warning: Could not convert SHORT50 value to float")
+                        return 0.0
+            return 0.0
+        except Exception as e:
+            if self.verbose:
+                print(f"Error getting SHORT50: {str(e)}")
+            return 0.0
 
     def dir30(self) -> float:
         """
@@ -360,7 +444,24 @@ class DigitalTyphoonImage:
 
         :return: float
         """
-        return float(self.track_data[TRACK_COLS.DIR30.value])
+        try:
+            if self.track_data is None or len(self.track_data) == 0:
+                return 0.0
+                
+            if hasattr(TRACK_COLS, 'DIR30') and hasattr(TRACK_COLS.DIR30, 'value'):
+                idx = TRACK_COLS.DIR30.value
+                if idx < len(self.track_data):
+                    try:
+                        return float(self.track_data[idx])
+                    except (ValueError, TypeError):
+                        if self.verbose:
+                            print(f"Warning: Could not convert DIR30 value to float")
+                        return 0.0
+            return 0.0
+        except Exception as e:
+            if self.verbose:
+                print(f"Error getting DIR30: {str(e)}")
+            return 0.0
 
     def long30(self) -> float:
         """
@@ -368,7 +469,24 @@ class DigitalTyphoonImage:
 
         :return: float
         """
-        return float(self.track_data[TRACK_COLS.LONG30.value])
+        try:
+            if self.track_data is None or len(self.track_data) == 0:
+                return 0.0
+                
+            if hasattr(TRACK_COLS, 'LONG30') and hasattr(TRACK_COLS.LONG30, 'value'):
+                idx = TRACK_COLS.LONG30.value
+                if idx < len(self.track_data):
+                    try:
+                        return float(self.track_data[idx])
+                    except (ValueError, TypeError):
+                        if self.verbose:
+                            print(f"Warning: Could not convert LONG30 value to float")
+                        return 0.0
+            return 0.0
+        except Exception as e:
+            if self.verbose:
+                print(f"Error getting LONG30: {str(e)}")
+            return 0.0
 
     def short30(self) -> float:
         """
@@ -376,7 +494,24 @@ class DigitalTyphoonImage:
 
         :return: float
         """
-        return float(self.track_data[TRACK_COLS.SHORT30.value])
+        try:
+            if self.track_data is None or len(self.track_data) == 0:
+                return 0.0
+                
+            if hasattr(TRACK_COLS, 'SHORT30') and hasattr(TRACK_COLS.SHORT30, 'value'):
+                idx = TRACK_COLS.SHORT30.value
+                if idx < len(self.track_data):
+                    try:
+                        return float(self.track_data[idx])
+                    except (ValueError, TypeError):
+                        if self.verbose:
+                            print(f"Warning: Could not convert SHORT30 value to float")
+                        return 0.0
+            return 0.0
+        except Exception as e:
+            if self.verbose:
+                print(f"Error getting SHORT30: {str(e)}")
+            return 0.0
 
     def landfall(self) -> float:
         """
@@ -384,7 +519,24 @@ class DigitalTyphoonImage:
 
         :return: float
         """
-        return float(self.track_data[TRACK_COLS.LANDFALL.value])
+        try:
+            if self.track_data is None or len(self.track_data) == 0:
+                return 0.0
+                
+            if hasattr(TRACK_COLS, 'LANDFALL') and hasattr(TRACK_COLS.LANDFALL, 'value'):
+                idx = TRACK_COLS.LANDFALL.value
+                if idx < len(self.track_data):
+                    try:
+                        return float(self.track_data[idx])
+                    except (ValueError, TypeError):
+                        if self.verbose:
+                            print(f"Warning: Could not convert LANDFALL value to float")
+                        return 0.0
+            return 0.0
+        except Exception as e:
+            if self.verbose:
+                print(f"Error getting LANDFALL: {str(e)}")
+            return 0.0
 
     def interpolated(self) -> bool:
         """
@@ -392,7 +544,24 @@ class DigitalTyphoonImage:
 
         :return: bool
         """
-        return bool(self.track_data[TRACK_COLS.INTERPOLATED.value])
+        try:
+            if self.track_data is None or len(self.track_data) == 0:
+                return False
+                
+            if hasattr(TRACK_COLS, 'INTERPOLATED') and hasattr(TRACK_COLS.INTERPOLATED, 'value'):
+                idx = TRACK_COLS.INTERPOLATED.value
+                if idx < len(self.track_data):
+                    try:
+                        return bool(self.track_data[idx])
+                    except (ValueError, TypeError):
+                        if self.verbose:
+                            print(f"Warning: Could not convert INTERPOLATED value to bool")
+                        return False
+            return False
+        except Exception as e:
+            if self.verbose:
+                print(f"Error getting INTERPOLATED: {str(e)}")
+            return False
 
     def filepath(self) -> str:
         """
@@ -570,3 +739,64 @@ class DigitalTyphoonImage:
             if hasattr(self, 'verbose') and self.verbose:
                 print(f"Error loading image {os.path.basename(image_filepath)}: {str(e)}")
             return np.array([])
+
+    def debug_track_data(self) -> None:
+        """
+        Print detailed diagnostic information about the track data.
+        Useful for debugging missing or incorrect values.
+        
+        :return: None
+        """
+        print("\n=== TRACK DATA DIAGNOSTICS ===")
+        print(f"Sequence ID: {self.sequence_str}")
+        print(f"Track data type: {type(self.track_data)}")
+        print(f"Track data length: {len(self.track_data) if hasattr(self.track_data, '__len__') else 'N/A'}")
+        print(f"Track data content: {self.track_data}")
+        
+        if len(self.track_data) > 0:
+            print("\nTrack column values:")
+            for col_name in dir(TRACK_COLS):
+                if col_name.startswith('_') or not col_name.isupper():
+                    continue
+                
+                col = getattr(TRACK_COLS, col_name)
+                if hasattr(col, 'value'):
+                    col_idx = col.value
+                    print(f"  {col_name} (index {col_idx}):", end=" ")
+                    
+                    try:
+                        if col_idx < len(self.track_data):
+                            value = self.track_data[col_idx]
+                            print(f"{value} (type: {type(value)})")
+                        else:
+                            print("INDEX OUT OF BOUNDS")
+                    except Exception as e:
+                        print(f"ERROR: {str(e)}")
+        
+        print("\nMethod outputs:")
+        try:
+            print(f"  year(): {self.year()}")
+        except Exception as e:
+            print(f"  year() ERROR: {str(e)}")
+            
+        try:
+            print(f"  month(): {self.month()}")
+        except Exception as e:
+            print(f"  month() ERROR: {str(e)}")
+            
+        try:
+            print(f"  wind(): {self.wind()}")
+        except Exception as e:
+            print(f"  wind() ERROR: {str(e)}")
+            
+        try:
+            print(f"  long(): {self.long()}")
+        except Exception as e:
+            print(f"  long() ERROR: {str(e)}")
+            
+        print("\nImage information:")
+        print(f"  Has image path: {self.image_filepath is not None}")
+        if self.image_filepath:
+            print(f"  Image path: {self.image_filepath}")
+            print(f"  Image exists: {os.path.exists(self.image_filepath)}")
+        print("==========================\n")

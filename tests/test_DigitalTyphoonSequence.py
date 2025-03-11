@@ -1,4 +1,10 @@
 from config_test import *
+import os
+import sys
+
+# Add the parent directory to the system path
+sys.path.insert(0, os.path.abspath(
+    os.path.join(os.path.dirname(__file__), '..')))
 from pyphoon2.DigitalTyphoonSequence import DigitalTyphoonSequence
 import numpy as np
 from unittest import TestCase
