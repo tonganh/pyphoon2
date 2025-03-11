@@ -11,3 +11,17 @@ METADATA_DIRS = ['/dataset/0/wnp/metadata/',
 METADATA_JSONS = ['/dataset/0/wnp/metadata.json',
                   '/dataset/1/wnp/metadata.json',
                   '/dataset/2/wnp/metadata.json']
+
+# Print for debugging
+import os
+print("Current working directory:", os.getcwd())
+
+# Constants defined in this file
+print("IMAGE_DIR:", IMAGE_DIR)
+print("METADATA_DIR:", METADATA_DIR)
+print("METADATA_JSON:", METADATA_JSON)
+
+# Check if directories exist
+print("IMAGE_DIR exists:", os.path.exists(IMAGE_DIR))
+print("METADATA_DIR exists:", os.path.exists(METADATA_DIR))
+print("METADATA_JSON exists:", os.path.exists(METADATA_JSON))
