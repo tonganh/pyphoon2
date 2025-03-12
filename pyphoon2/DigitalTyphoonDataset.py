@@ -144,12 +144,15 @@ class DigitalTyphoonDataset(Dataset):
         self.number_of_nonempty_sequences = 0
         self.number_of_images = 0
         self.number_of_original_images = 0
-
+        
         # Dictionary mapping season to list of sequences (strings)
         self.season_to_sequence_nums: Dict[int, List[str]] = {}
-
-        # Dictionary mapping the total image idx to a sequecne object
+        
+        # Dictionary mapping the total image idx to a sequence object
         self._image_idx_to_sequence: Dict[int, DigitalTyphoonSequence] = {}
+        
+        # Additional attribute for caching nonempty seasons
+        self.number_of_nonempty_seasons = None
 
         # Load data
         if self.is_valid_input_multi_dirs(image_dirs, metadata_dirs, metadata_jsons):
@@ -563,10 +566,17 @@ class DigitalTyphoonDataset(Dataset):
         """
         # Process the metadata JSON file
         self.process_metadata_file(metadata_json)
-        # Populate image data
-        self._populate_images_into_sequences(image_dir)
-        # Populate track data
+        
+        # IMPORTANT: Load track data first, so it's available when loading images
+        if self.verbose:
+            print("Loading track data first to ensure it's available for images...")
         self._populate_track_data_into_sequences(metadata_dir)
+        
+        # Now populate image data - images will be able to access track data
+        if self.verbose:
+            print("Now loading images, which can use the track data...")
+        self._populate_images_into_sequences(image_dir)
+        
         # Assign indices
         self._assign_all_images_a_dataset_idx()
 
@@ -624,9 +634,11 @@ class DigitalTyphoonDataset(Dataset):
             # Get all images
             all_indices = list(range(len(self)))
             
-            # Shuffle indices
+            # Shuffle indices correctly using torch.randperm with the generator
             if generator is not None:
-                generator.shuffle(all_indices)
+                # Use torch's randperm with the generator instead of shuffle
+                shuffled_indices = torch.randperm(len(all_indices), generator=generator).tolist()
+                all_indices = [all_indices[i] for i in shuffled_indices]
             else:
                 random.shuffle(all_indices)
             
@@ -1185,65 +1197,6 @@ class DigitalTyphoonDataset(Dataset):
         """
         return self.sequences
 
-    # def _populate_images_into_sequences(self, image_dir: str) -> None:
-    #     """
-    #     This method matches images to typhoon sequences based on the provided image directory.
-        
-    #     :param image_dir: Directory containing typhoon image files, typically organized by sequence
-    #     :return: None
-    #     """
-    #     breakpoint()
-    #     if not os.path.exists(image_dir):
-    #         if self.verbose:
-    #             print(f"Warning: Image directory '{image_dir}' does not exist")
-    #         return
-            
-    #     # Get all h5 files
-    #     h5_files = []
-    #     for root, _, files in os.walk(image_dir):
-    #         for file in files:
-    #             if file.endswith('.h5'):
-    #                 # Store absolute path to ensure consistency
-    #                 h5_files.append(os.path.join(root, file))
-                    
-    #     if self.verbose:
-    #         print(f"Found {len(h5_files)} h5 files in {image_dir}")
-        
-    #     # Process each file
-    #     for h5file in h5_files:
-    #         try:
-    #             # Extract sequence id from filename or parent directory
-    #             filename = os.path.basename(h5file)
-    #             parent_dir = os.path.basename(os.path.dirname(h5file))
-                
-    #             seq_id = None
-    #             # Try to get sequence ID from filename (format: YYYYMMDDHH-SEQID-*)
-    #             parts = filename.split('-')
-    #             if len(parts) >= 2:
-    #                 seq_id = parts[1]
-                    
-    #             # If not found, try parent directory name
-    #             if not seq_id and parent_dir.isdigit():
-    #                 seq_id = parent_dir
-                    
-    #             # Skip if we couldn't determine the sequence ID
-    #             if not seq_id or not self.sequence_exists(seq_id):
-    #                 continue
-                    
-    #             # Add the image to the appropriate sequence
-    #             seq_obj = self._get_seq_from_seq_str(seq_id)
-    #             # Use absolute path when adding the image, and pass the ignore_list
-    #             seq_obj.add_image_path(os.path.abspath(h5file), verbose=self.verbose,ignore_list=self.ignore_list)
-                
-    #         except Exception as e:
-    #             if self.verbose:
-    #                 print(f"Error processing file {h5file}: {str(e)}")
-        
-    #     # Summarize results when in verbose mode
-    #     if self.verbose:
-    #         for seq in self.sequences:
-    #             print(f"Sequence {seq.get_sequence_str()} has {seq.get_num_images()} images")
-
     def _populate_images_into_sequences(self, image_dir: str) -> None:
         """
         Traverses the image directory and populates each of the images sequentially into their respective seq_str
@@ -1277,20 +1230,79 @@ class DigitalTyphoonDataset(Dataset):
         Traverses the track data files and populates each into their respective seq_str objects
 
         :param metadata_dir: path to directory containing track data files
+        :param common_sequences: optional list of sequences to filter by
         :return: None
         """
         NEED_FILTER_COMMON_SEQUENCES = common_sequences is not None
+        
+        if self.verbose:
+            print(f"\nPopulating track data from {metadata_dir}")
+            if NEED_FILTER_COMMON_SEQUENCES:
+                print(f"Filtering to common sequences: {common_sequences[:5]}... (total {len(common_sequences)})")
+        
+        files_processed = 0
+        sequences_with_track_data = 0
+        
         for root, dirs, files in os.walk(metadata_dir, topdown=True):
+            if self.verbose:
+                print(f"Found {len(files)} files in {root}")
+                
             for file in sorted(files):
                 file_valid = True
                 file_sequence = get_seq_str_from_track_filename(file)
+                
                 if NEED_FILTER_COMMON_SEQUENCES:
                     file_valid = file_sequence in common_sequences
+                
                 if self.sequence_exists(file_sequence) and file_valid:
-                    self._get_seq_from_seq_str(
-                        file_sequence).set_track_path(root + file)
-                    self._read_in_track_file_to_sequence(
-                        file_sequence, root + file)
+                    if self.verbose and files_processed < 5:
+                        print(f"Processing track file: {file} for sequence {file_sequence}")
+                        
+                    full_path = os.path.join(root, file)
+                    
+                    # Set the track path
+                    sequence = self._get_seq_from_seq_str(file_sequence)
+                    sequence.set_track_path(full_path)
+                    
+                    # Read the track data into the sequence
+                    try:
+                        self._read_in_track_file_to_sequence(file_sequence, full_path)
+                        sequences_with_track_data += 1
+                        
+                        # Verify after reading
+                        if self.verbose and files_processed < 3:
+                            image_count = len(sequence.images)
+                            images_with_track = sum(1 for img in sequence.images if img.track_data is not None and len(img.track_data) > 0)
+                            print(f"Sequence {file_sequence}: {images_with_track}/{image_count} images have track data")
+                            
+                    except Exception as e:
+                        if self.verbose:
+                            print(f"Error reading track file {full_path}: {str(e)}")
+                            
+                    files_processed += 1
+                elif self.verbose and files_processed < 10:
+                    if not self.sequence_exists(file_sequence):
+                        print(f"Skipping track file {file}: sequence {file_sequence} does not exist in dataset")
+                    elif not file_valid:
+                        print(f"Skipping track file {file}: sequence {file_sequence} not in common sequences")
+        
+        if self.verbose:
+            print(f"Processed {files_processed} track files for {sequences_with_track_data} sequences")
+            
+            # Verify track data assignment
+            total_images = 0
+            images_with_track = 0
+            for sequence in self.sequences:
+                seq_images = len(sequence.images)
+                seq_with_track = sum(1 for img in sequence.images if img.track_data is not None and len(img.track_data) > 0)
+                total_images += seq_images
+                images_with_track += seq_with_track
+                
+                if seq_images > 0 and seq_with_track == 0 and self.verbose:
+                    print(f"WARNING: Sequence {sequence.sequence_str} has {seq_images} images but none have track data")
+            
+            if total_images > 0:
+                print(f"Overall: {images_with_track}/{total_images} images ({images_with_track/total_images*100:.1f}%) have track data")
 
     def _read_one_seq_from_metadata(self, sequence_str: str,
                                     metadata_json: Dict):
@@ -1471,6 +1483,7 @@ class DigitalTyphoonDataset(Dataset):
         bucket_counter = 0
         season_iter = 0
         while season_iter < len(randomized_season_list):
+            print("season_iter", season_iter)
             if len(return_indices_sorted[bucket_counter][2]) < return_indices_sorted[bucket_counter][0]:
                 for seq in self.season_to_sequence_nums[randomized_season_list[season_iter]]:
                     sequence_obj = self._get_seq_from_seq_str(seq)
@@ -1481,10 +1494,14 @@ class DigitalTyphoonDataset(Dataset):
                     else:
                         return_indices_sorted[bucket_counter][2] \
                             .extend(self.seq_indices_to_total_indices(self._get_seq_from_seq_str(seq)))
+                
+                # Increment season_iter after processing the current season
                 season_iter += 1
-            bucket_counter += 1
-            if bucket_counter == num_buckets:
-                bucket_counter = 0
+            else:
+                # If current bucket is full, move to next bucket
+                bucket_counter += 1
+                if bucket_counter == num_buckets:
+                    bucket_counter = 0
 
         return_indices_sorted.sort(key=lambda x: x[1])
         return [Subset(self, bucket_indices) for _, _, bucket_indices in return_indices_sorted]
@@ -1616,7 +1633,7 @@ class DigitalTyphoonDataset(Dataset):
         # Sequence string to the first total idx belonging to
         self._seq_str_to_first_total_idx: Dict[str, int] = {}
         #  that seq_str
-        self.season_to_sequence_nums: OrderedDict[str, List[str]] = OrderedDict(
+        self.season_to_sequence_nums: OrderedDict[int, List[str]] = OrderedDict(
         )
 
         self.number_of_sequences = 0

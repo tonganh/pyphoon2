@@ -89,6 +89,9 @@ class DigitalTyphoonImage:
             self.set_image_data(
                 self.image_filepath, load_imgs_into_mem=self.load_imgs_into_mem)
 
+        if self.verbose:
+            print(f"track_data initialized with: {self.track_data}")
+
     def image(self, spectrum=None) -> np.ndarray:
         """
         Gets this image as a numpy array.

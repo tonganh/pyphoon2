@@ -52,7 +52,7 @@ class TestDigitalTyphoonDataset(TestCase):
             metadata_json,
             label_column,
             split_dataset_by=split_dataset_by,  # Correct parameter passed
-            verbose=True,  # Set to True for more debug info
+            verbose=False,  # Set to True for more debug info
             **kwargs
         )
 
@@ -525,6 +525,7 @@ class TestDigitalTyphoonDataset(TestCase):
 
     def test_get_nonempty_seasons_and_sequences(self):
         def filter_func(image):
+            print("image.year()", image.year())
             if image.year() == 2008:
                 print("image.year()", image.year())
             return image.year() != 2008
@@ -555,7 +556,7 @@ class TestDigitalTyphoonDataset(TestCase):
                                              filter_func=filter_func,
                                              verbose=False)
         bucket_1, bucket_2 = test_dataset.random_split([0.7, 0.3], split_by='sequence')
-        should_contain = {'197918', '200802', '202222', '200801', '201323'}
+        should_contain = {'201323', '197918', '202222'}
         does_contain = set()
         for idx in bucket_1.indices:
             print("bucket_1.indices", bucket_1.indices)
@@ -574,7 +575,7 @@ class TestDigitalTyphoonDataset(TestCase):
 
         bucket_1, bucket_2 = test_dataset.random_split(
             [0.7, 0.3], split_by='season')
-        should_contain = {'197918', '200801', '202222', '200802', '201323'}
+        should_contain = {'201323', '197918', '202222'}
         does_contain = set()
         for idx in bucket_1.indices:
             self.assertNotEqual(
