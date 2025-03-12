@@ -61,6 +61,7 @@ class TestDigitalTyphoonDataset(TestCase):
 
         def filter_func(image):
             try:
+                print("image.grade()", image.grade())
                 return image.grade() < 7
             except (ValueError, TypeError, AttributeError) as e:
                 print(f"Filter error on image {image.filepath() if hasattr(image, 'filepath') else 'unknown'}: {e}")
@@ -524,6 +525,8 @@ class TestDigitalTyphoonDataset(TestCase):
 
     def test_get_nonempty_seasons_and_sequences(self):
         def filter_func(image):
+            if image.year() == 2008:
+                print("image.year()", image.year())
             return image.year() != 2008
 
         test_dataset = DigitalTyphoonDataset(IMAGE_DIR, METADATA_DIR,
@@ -535,7 +538,7 @@ class TestDigitalTyphoonDataset(TestCase):
             return image.sequence_id() != '200801'
 
         test_dataset = DigitalTyphoonDataset(IMAGE_DIR, METADATA_DIR,
-                                             METADATA_JSON, 'grade', filter_func=filter_func, verbose=False)
+                                             METADATA_JSON, 'grade', filter_func=filter_func, verbose=True)
         self.assertEqual(test_dataset.get_number_of_nonempty_sequences(), 4)
         self.assertEqual(test_dataset.get_nonempty_seasons(), 4)
 

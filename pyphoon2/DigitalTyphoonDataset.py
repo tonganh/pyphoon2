@@ -452,6 +452,7 @@ class DigitalTyphoonDataset(Dataset):
             
             # Process this sequence with the common images
             try:
+                breakpoint()
                 sequence_obj.process_seq_img_dirs_into_sequence(
                     directory_paths=sequence_dirs,
                     common_image_names=list(common_images),
@@ -1184,65 +1185,92 @@ class DigitalTyphoonDataset(Dataset):
         """
         return self.sequences
 
+    # def _populate_images_into_sequences(self, image_dir: str) -> None:
+    #     """
+    #     This method matches images to typhoon sequences based on the provided image directory.
+        
+    #     :param image_dir: Directory containing typhoon image files, typically organized by sequence
+    #     :return: None
+    #     """
+    #     breakpoint()
+    #     if not os.path.exists(image_dir):
+    #         if self.verbose:
+    #             print(f"Warning: Image directory '{image_dir}' does not exist")
+    #         return
+            
+    #     # Get all h5 files
+    #     h5_files = []
+    #     for root, _, files in os.walk(image_dir):
+    #         for file in files:
+    #             if file.endswith('.h5'):
+    #                 # Store absolute path to ensure consistency
+    #                 h5_files.append(os.path.join(root, file))
+                    
+    #     if self.verbose:
+    #         print(f"Found {len(h5_files)} h5 files in {image_dir}")
+        
+    #     # Process each file
+    #     for h5file in h5_files:
+    #         try:
+    #             # Extract sequence id from filename or parent directory
+    #             filename = os.path.basename(h5file)
+    #             parent_dir = os.path.basename(os.path.dirname(h5file))
+                
+    #             seq_id = None
+    #             # Try to get sequence ID from filename (format: YYYYMMDDHH-SEQID-*)
+    #             parts = filename.split('-')
+    #             if len(parts) >= 2:
+    #                 seq_id = parts[1]
+                    
+    #             # If not found, try parent directory name
+    #             if not seq_id and parent_dir.isdigit():
+    #                 seq_id = parent_dir
+                    
+    #             # Skip if we couldn't determine the sequence ID
+    #             if not seq_id or not self.sequence_exists(seq_id):
+    #                 continue
+                    
+    #             # Add the image to the appropriate sequence
+    #             seq_obj = self._get_seq_from_seq_str(seq_id)
+    #             # Use absolute path when adding the image, and pass the ignore_list
+    #             seq_obj.add_image_path(os.path.abspath(h5file), verbose=self.verbose,ignore_list=self.ignore_list)
+                
+    #         except Exception as e:
+    #             if self.verbose:
+    #                 print(f"Error processing file {h5file}: {str(e)}")
+        
+    #     # Summarize results when in verbose mode
+    #     if self.verbose:
+    #         for seq in self.sequences:
+    #             print(f"Sequence {seq.get_sequence_str()} has {seq.get_num_images()} images")
+
     def _populate_images_into_sequences(self, image_dir: str) -> None:
         """
-        This method matches images to typhoon sequences based on the provided image directory.
-        
-        :param image_dir: Directory containing typhoon image files, typically organized by sequence
+        Traverses the image directory and populates each of the images sequentially into their respective seq_str
+        objects.
+
+        :param image_dir: path to directory containing directory of typhoon images.
         :return: None
         """
-        if not os.path.exists(image_dir):
-            if self.verbose:
-                print(f"Warning: Image directory '{image_dir}' does not exist")
-            return
-            
-        # Get all h5 files
-        h5_files = []
-        for root, _, files in os.walk(image_dir):
-            for file in files:
-                if file.endswith('.h5'):
-                    # Store absolute path to ensure consistency
-                    h5_files.append(os.path.join(root, file))
-                    
-        if self.verbose:
-            print(f"Found {len(h5_files)} h5 files in {image_dir}")
-        
-        # Process each file
-        for h5file in h5_files:
-            try:
-                # Extract sequence id from filename or parent directory
-                filename = os.path.basename(h5file)
-                parent_dir = os.path.basename(os.path.dirname(h5file))
-                
-                seq_id = None
-                # Try to get sequence ID from filename (format: YYYYMMDDHH-SEQID-*)
-                parts = filename.split('-')
-                if len(parts) >= 2:
-                    seq_id = parts[1]
-                    
-                # If not found, try parent directory name
-                if not seq_id and parent_dir.isdigit():
-                    seq_id = parent_dir
-                    
-                # Skip if we couldn't determine the sequence ID
-                if not seq_id or not self.sequence_exists(seq_id):
-                    continue
-                    
-                # Add the image to the appropriate sequence
-                seq_obj = self._get_seq_from_seq_str(seq_id)
-                # Use absolute path when adding the image, and pass the ignore_list
-                seq_obj.add_image_path(os.path.abspath(h5file), 
-                                     verbose=self.verbose,
-                                     ignore_list=self.ignore_list)
-                
-            except Exception as e:
+        load_into_mem = self.load_data_into_memory in {LOAD_DATA.ONLY_IMG, LOAD_DATA.ALL_DATA}
+        for root, dirs, files in os.walk(image_dir, topdown=True):
+            for dir_name in sorted(dirs):  # Read sequences in chronological order, not necessary but convenient
+                sequence_obj = self._get_seq_from_seq_str(dir_name)
+                sequence_obj.process_seq_img_dir_into_sequence(root+dir_name, load_into_mem,ignore_list=self.ignore_list,filter_func=self.filter_func,spectrum=self.spectrum)
+                if self.image_dir =='test_data_files/image/':
+                    print("sequence_obj.get_num_images()", sequence_obj.get_num_images())
+                    print("self.number_of_images", self.number_of_images)
+                self.number_of_images += sequence_obj.get_num_images()
+
+        for sequence in self.sequences:
+            if sequence.get_num_images() > 0:
+                self.number_of_nonempty_sequences += 1
+
+            if not sequence.num_images_match_num_expected():
                 if self.verbose:
-                    print(f"Error processing file {h5file}: {str(e)}")
-        
-        # Summarize results when in verbose mode
-        if self.verbose:
-            for seq in self.sequences:
-                print(f"Sequence {seq.get_sequence_str()} has {seq.get_num_images()} images")
+                    warnings.warn(f'Sequence {sequence.sequence_str} has only {sequence.get_num_images()} when '
+                                  f'it should have {sequence.num_original_images}. If this is intended, ignore this warning.')
+            
 
     def _populate_track_data_into_sequences(self, metadata_dir: str, common_sequences: List[str] = None) -> None:
         """

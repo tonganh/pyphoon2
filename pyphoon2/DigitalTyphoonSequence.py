@@ -1,8 +1,7 @@
 import os
 import warnings
 from datetime import datetime
-
-from typing import Callable
+from typing import Callable, Union
 
 from pathlib import Path
 import numpy as np
@@ -16,7 +15,7 @@ from pyphoon2.DigitalTyphoonUtils import parse_image_filename, is_image_file, TR
 class DigitalTyphoonSequence:
 
     def __init__(self, seq_str: str, start_season: int, num_images: int, transform_func=None,
-                 spectrum='Infrared', verbose=False):
+                 spectrum='Infrared', verbose=False, load_imgs_into_mem=False):
         """
         Class representing one typhoon sequence from the DigitalTyphoon dataset
 
@@ -27,8 +26,10 @@ class DigitalTyphoonSequence:
                             It should take and return a np array
         :param spectrum: str, specifies the spectrum of the images (e.g., 'Infrared')
         :param verbose: bool, if True, additional information and warnings will be printed during processing
+        :param load_imgs_into_mem: bool, if True, images will be loaded into memory when creating image objects
         """
         self.verbose = verbose
+        self.load_imgs_into_mem = load_imgs_into_mem
 
         self.sequence_str = seq_str  # sequence ID string
         self.season = start_season
@@ -154,34 +155,44 @@ class DigitalTyphoonSequence:
                             print(f"Found track data for {file_basename} at datetime {file_datetime}")
                     
                     # Create the image object
-                    image = DigitalTyphoonImage(
-                        file_basename, abs_file_path, sequence_id=self.get_sequence_str(),
-                        transform_func=self.transform_func, spectrum=self.spectrum
-                    )
-                    
-                    # Add track data if available
-                    if track_data is not None:
-                        image.set_track_data(track_data)
-                        
-                    # Debug print
-                    if self.verbose:
-                        print(f"Created image object: {abs_file_path}")
-                        print(f"  Year: {image.year()}, Wind: {image.wind()}, Long: {image.long()}")
-                    
-                    # Apply filter
                     try:
-                        # Only add if the filter passes
-                        if filter_func(image):
+                        # Check if file exists first to avoid constructor error
+                        if not os.path.exists(abs_file_path):
                             if self.verbose:
-                                print(f"  Image passed filter: {abs_file_path}")
-                            self.images.append(image)
-                            self.datetime_to_image[file_datetime] = image
-                        else:
+                                print(f"Warning: Image file does not exist: {abs_file_path}")
+                                
+                        image = DigitalTyphoonImage(
+                            abs_file_path, sequence_id=self.get_sequence_str(),
+                            transform_func=self.transform_func, spectrum=self.spectrum,
+                            load_imgs_into_mem=load_imgs_into_mem,
+                            verbose=self.verbose
+                        )
+                        
+                        # Add track data if available
+                        if track_data is not None:
+                            image.set_track_data(track_data)
                             if self.verbose:
-                                print(f"  Image filtered out: {abs_file_path}")
+                                print(f"  Added track data to image: wind={image.wind()}, long={image.long()}")
+                                
+                        # Apply filter
+                        try:
+                            # Only add if the filter passes
+                            if filter_func(image):
+                                if self.verbose:
+                                    print(f"  Image passed filter: {abs_file_path}")
+                                self.images.append(image)
+                                self.datetime_to_image[file_datetime] = image
+                            else:
+                                if self.verbose:
+                                    print(f"  Image filtered out: {abs_file_path}")
+                        except Exception as e:
+                            if self.verbose:
+                                print(f"Error applying filter to {abs_file_path}: {e}")
+                                import traceback
+                                traceback.print_exc()
                     except Exception as e:
                         if self.verbose:
-                            print(f"Error applying filter to {abs_file_path}: {e}")
+                            print(f"Error creating image object for {abs_file_path}: {e}")
                             import traceback
                             traceback.print_exc()
 
@@ -443,11 +454,13 @@ class DigitalTyphoonSequence:
                                           int(row[TRACK_COLS.HOUR.value]))
                     
                     # Create an image object with this track data
+                    # Use the provided load_imgs_into_mem if specified, otherwise use the instance variable
                     self.datetime_to_image[row_datetime] = DigitalTyphoonImage(
                         None, row, sequence_id=self.get_sequence_str(),
                         transform_func=self.transform_func,
                         spectrum=self.spectrum,
-                        verbose=self.verbose
+                        verbose=self.verbose,
+                        load_imgs_into_mem=self.load_imgs_into_mem
                     )
                     
                     # Debug the first row if verbose
@@ -530,7 +543,8 @@ class DigitalTyphoonSequence:
                 # Return a minimal DigitalTyphoonImage object
                 return DigitalTyphoonImage("", np.array([]), self.get_sequence_str(), 
                                           spectrum=spectrum or self.spectrum, 
-                                          verbose=self.verbose, transform_func=self.transform_func)
+                                          verbose=self.verbose, transform_func=self.transform_func,
+                                          load_imgs_into_mem=self.load_imgs_into_mem)
             
             # Get the existing image
             image = self.images[idx]
@@ -557,7 +571,8 @@ class DigitalTyphoonSequence:
             # Return a minimal DigitalTyphoonImage object
             return DigitalTyphoonImage("", np.array([]), self.get_sequence_str(), 
                                       spectrum=spectrum or self.spectrum,
-                                      verbose=self.verbose, transform_func=self.transform_func)
+                                      verbose=self.verbose, transform_func=self.transform_func,
+                                      load_imgs_into_mem=self.load_imgs_into_mem)
 
     def get_image_at_idx_as_numpy(self, idx: int, spectrum=None) -> np.ndarray:
         """
@@ -625,7 +640,7 @@ class DigitalTyphoonSequence:
         """
         return str(self.img_root)
 
-    def add_image_path(self, image_filepath, image_filepaths=None, track_entry=None, verbose=False, ignore_list=None):
+    def add_image_path(self, image_filepath, image_filepaths=None, track_entry=None, verbose=False, ignore_list=None, load_imgs_into_mem=None):
         """
         Adds an image to this sequence
 
@@ -634,8 +649,10 @@ class DigitalTyphoonSequence:
         :param track_entry: np.ndarray, track entry for this image
         :param verbose: bool, flag for verbose output
         :param ignore_list: Set of filenames to ignore
+        :param load_imgs_into_mem: Bool representing if images should be loaded into memory
         :return: none
         """
+        image = None  # Define image outside the try block
         try:
             # Get just the basename for ignore list checking
             filename = os.path.basename(image_filepath)
@@ -671,78 +688,74 @@ class DigitalTyphoonSequence:
                     else:
                         abs_image_filepaths.append(path)
             
-            # Extract datetime from filename for matching with track data
-            try:
-                metadata = parse_image_filename(filename)
-                _, file_datetime, _ = metadata
-                
-                # Check if we have track data for this datetime
-                if file_datetime in self.datetime_to_image:
-                    # Use track data from the existing datetime_to_image entry
-                    existing_track_data = self.datetime_to_image[file_datetime].track_data
-                    
-                    if verbose or self.verbose:
-                        print(f"Found matching track data for {filename} at datetime {file_datetime}")
-                    
-                    # Create the image object with both the filepath and the track data
-                    image = DigitalTyphoonImage(
-                        filename, abs_filepath, sequence_id=self.get_sequence_str(), 
-                        spectrum=self.spectrum, image_filepaths=abs_image_filepaths,
-                        verbose=verbose, transform_func=self.transform_func
-                    )
-                    
-                    # Set the track data from the existing entry
-                    image.set_track_data(existing_track_data)
-                    
-                    if verbose or self.verbose:
-                        print(f"Added track data to image: {filename}")
-                        # Print some track data values for debugging
-                        try:
-                            print(f"  Year: {image.year()}")
-                            print(f"  Wind: {image.wind()}")
-                            print(f"  Long: {image.long()}")
-                        except Exception as e:
-                            print(f"  Error accessing track data: {e}")
-                else:
-                    # No track data found for this datetime, use provided track entry or create empty one
-                    if verbose or self.verbose:
-                        print(f"No matching track data found for {filename} at datetime {file_datetime}")
-                    
-                    image = DigitalTyphoonImage(
-                        filename, abs_filepath, sequence_id=self.get_sequence_str(), 
-                        spectrum=self.spectrum, image_filepaths=abs_image_filepaths,
-                        verbose=verbose, transform_func=self.transform_func
-                    )
-                    
-                    # If track_entry was provided directly, use it
-                    if track_entry is not None:
-                        image.set_track_data(track_entry)
-                        if verbose or self.verbose:
-                            print(f"Using provided track entry for {filename}")
-            except Exception as e:
+            # First check if file exists to avoid DigitalTyphoonImage constructor error
+            if not os.path.exists(abs_filepath):
                 if verbose or self.verbose:
-                    print(f"Error extracting datetime from filename {filename}: {e}")
-                
-                # Create image without track data
-                image = DigitalTyphoonImage(
-                    filename, abs_filepath, sequence_id=self.get_sequence_str(), 
-                    spectrum=self.spectrum, image_filepaths=abs_image_filepaths,
-                    verbose=verbose, transform_func=self.transform_func
-                )
-            # If it passes filtering, add to images list
-            self.images.append(image)
+                    print(f"Warning: Image file does not exist: {abs_filepath}")
             
-            # Debug check
-            if self.verbose or verbose:
-                print(f"Added image to sequence: {filename}")
-                if len(image.track_data) > 0:
-                    print(f"  With track data: year={image.year()}, wind={image.wind()}, long={image.long()}")
-                else:
-                    print(f"  Without track data")
+            # Extract datetime from filename for matching with track data
+            metadata = parse_image_filename(filename)
+            _, file_datetime, _ = metadata
+            
+            # Choose load_imgs_into_mem value
+            effective_load_imgs = self.load_imgs_into_mem if load_imgs_into_mem is None else load_imgs_into_mem
+            
+            # Check if we have track data for this datetime
+            if file_datetime in self.datetime_to_image:
+                # Use track data from the existing datetime_to_image entry
+                existing_track_data = self.datetime_to_image[file_datetime].track_data
+                
+                if verbose or self.verbose:
+                    print(f"Found matching track data for {filename} at datetime {file_datetime}")
+                
+                # Create the image object with both the filepath and the track data
+                image = DigitalTyphoonImage(
+                    abs_filepath, track_data=existing_track_data, sequence_id=self.get_sequence_str(), 
+                    spectrum=self.spectrum, image_filepaths=abs_image_filepaths,
+                    verbose=verbose, transform_func=self.transform_func,
+                    load_imgs_into_mem=effective_load_imgs
+                )
+                
+                if verbose or self.verbose:
+                    print(f"Added track data to image: {filename}")
+                    # Print some track data values for debugging
+                    try:
+                        print(f"  Year: {image.year()}")
+                        print(f"  Wind: {image.wind()}")
+                        print(f"  Long: {image.long()}")
+                    except Exception as e:
+                        print(f"  Error accessing track data: {e}")
+            else:
+                # No track data found for this datetime, use provided track entry or create empty one
+                if verbose or self.verbose:
+                    print(f"No matching track data found for {filename} at datetime {file_datetime}")
+                
+                # Create image without track data or with provided track data
+                image = DigitalTyphoonImage(
+                    abs_filepath, track_data=track_entry, sequence_id=self.get_sequence_str(), 
+                    spectrum=self.spectrum, image_filepaths=abs_image_filepaths,
+                    verbose=verbose, transform_func=self.transform_func,
+                    load_imgs_into_mem=effective_load_imgs
+                )
+                
+                if track_entry is not None and verbose:
+                    print(f"Using provided track entry for {filename}")
+            
+            # If we successfully created an image, add it to the sequence
+            if image is not None:
+                self.images.append(image)
+                
+                # Debug check
+                if self.verbose or verbose:
+                    print(f"Added image to sequence: {filename}")
+                    if hasattr(image, 'track_data') and image.track_data is not None and len(image.track_data) > 0:
+                        print(f"  With track data: year={image.year()}, wind={image.wind()}, long={image.long()}")
+                    else:
+                        print(f"  Without track data")
             
         except Exception as e:
             if self.verbose or verbose:
                 print(f"Error adding image path {image_filepath}: {str(e)}")
                 import traceback
                 traceback.print_exc()
-            # Continue processing other images
+            # DON'T try to use 'image' here, it might not be defined

@@ -32,14 +32,39 @@ class DigitalTyphoonImage:
         self.spectrum = spectrum
         self.transform_func = transform_func
 
+
         self.image_filepath = image_filepath
         self.image_filepaths = image_filepaths
         self.image_array = None
 
-        if self.image_filepath:
-            # Check if the image file exists
-            if not os.path.exists(self.image_filepath):
-                raise FileNotFoundError(f"Image file {self.image_filepath} does not exist")
+        # Check image_filepath is exists
+        if self.image_filepath and not os.path.exists(self.image_filepath):
+            raise FileNotFoundError(f"Image file does not exist: {self.image_filepath}")
+        if self.verbose:
+            print(f"Creating DigitalTyphoonImage: filepath={image_filepath}, load_imgs_into_mem={load_imgs_into_mem}")
+        
+        if self.image_filepath and os.path.exists(self.image_filepath):
+            if self.verbose:
+                print(f"Image file exists: {self.image_filepath}")
+                
+            # If loading into memory is requested, immediately load the image
+            if self.load_imgs_into_mem:
+                if self.verbose:
+                    print(f"Loading image into memory: {self.image_filepath}")
+                try:
+                    self.image_array = self._get_h5_image_as_numpy(self.image_filepath, self.spectrum)
+                    if self.verbose:
+                        if self.image_array.size > 0:
+                            print(f"Successfully loaded image, shape={self.image_array.shape}")
+                        else:
+                            print(f"Warning: Loaded image is empty")
+                except Exception as e:
+                    if self.verbose:
+                        print(f"Failed to load image: {str(e)}")
+                        import traceback
+                        traceback.print_exc()
+        elif self.image_filepath and self.verbose:
+            print(f"Warning: Image file does not exist: {self.image_filepath}")
         
         # Initialize track_data as empty array if None is provided
         if track_data is None:
@@ -60,12 +85,11 @@ class DigitalTyphoonImage:
                 if self.verbose:
                     print(f"Warning: Could not convert track_data to numpy array")
                 self.track_data = np.array([])
-        
         if self.image_filepath is not None and self.load_imgs_into_mem:
             self.set_image_data(
                 self.image_filepath, load_imgs_into_mem=self.load_imgs_into_mem)
 
-    def image(self) -> np.ndarray:
+    def image(self, spectrum=None) -> np.ndarray:
         """
         Gets this image as a numpy array.
 
@@ -80,24 +104,40 @@ class DigitalTyphoonImage:
         else:
             # Load the image from file
             if not self.image_filepath:
+                if hasattr(self, 'verbose') and self.verbose:
+                    print(f"Warning: No image filepath set, returning empty array")
                 return np.array([], dtype=np.float64)
 
             try:
-                image_array = self._get_h5_image_as_numpy(self.image_filepath, self.spectrum)
+                if spectrum is None:
+                    spectrum = self.spectrum
+                image_array = self._get_h5_image_as_numpy(self.image_filepath, spectrum)
 
                 if image_array.size == 0:
                     if hasattr(self, 'verbose') and self.verbose:
                         print(f"Warning: Image loaded from {self.image_filepath} is empty")
                     return image_array
+                    
+                # If we should keep images in memory, store the loaded array
+                if self.load_imgs_into_mem:
+                    self.image_array = image_array
+                    if hasattr(self, 'verbose') and self.verbose:
+                        print(f"Loaded image into memory: {self.image_filepath}")
+                        
             except Exception as e:
                 if hasattr(self, 'verbose') and self.verbose:
                     print(f"Error loading image from {self.image_filepath}: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
                 return np.array([], dtype=np.float64)
 
         # Apply transform function if defined
         if self.transform_func is not None:
             try:
                 image_array = self.transform_func(image_array)
+                # If transform changes the array and we're keeping in memory, update stored array
+                if self.load_imgs_into_mem:
+                    self.image_array = image_array
             except Exception as e:
                 if hasattr(self, 'verbose') and self.verbose:
                     print(f"Error applying transform function: {str(e)}")
@@ -613,6 +653,15 @@ class DigitalTyphoonImage:
             spectrum = self.spectrum
 
         self.image_filepath = image_filepath
+        self.image_filepaths = None
+        self.image_array = None
+
+        # Check if file exists, but don't raise an exception
+        # Just warn if verbose is enabled
+        if self.image_filepath and not os.path.exists(self.image_filepath):
+            if self.verbose:
+                print(f"Warning: Image file does not exist: {self.image_filepath}")
+
         if self.load_imgs_into_mem:
             # Load the image on instantiation if load_imgs_into_mem is set to True
             self.image()
@@ -752,6 +801,16 @@ class DigitalTyphoonImage:
         print(f"Track data type: {type(self.track_data)}")
         print(f"Track data length: {len(self.track_data) if hasattr(self.track_data, '__len__') else 'N/A'}")
         print(f"Track data content: {self.track_data}")
+        
+        print("\nImage Data Status:")
+        print(f"  Image filepath: {self.image_filepath}")
+        print(f"  Image exists: {os.path.exists(self.image_filepath) if self.image_filepath else False}")
+        print(f"  load_imgs_into_mem setting: {self.load_imgs_into_mem}")
+        print(f"  Image preloaded: {self.image_array is not None}")
+        if self.image_array is not None:
+            print(f"  Image array shape: {self.image_array.shape}")
+            print(f"  Image array dtype: {self.image_array.dtype}")
+            print(f"  Image array non-zero: {np.any(self.image_array != 0)}")
         
         if len(self.track_data) > 0:
             print("\nTrack column values:")
