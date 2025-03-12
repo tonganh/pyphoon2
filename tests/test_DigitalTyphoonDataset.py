@@ -52,7 +52,7 @@ class TestDigitalTyphoonDataset(TestCase):
             metadata_json,
             label_column,
             split_dataset_by=split_dataset_by,  # Correct parameter passed
-            verbose=False,  # Set to True for more debug info
+            verbose=verbose,  # Set to True for more debug info
             **kwargs
         )
 

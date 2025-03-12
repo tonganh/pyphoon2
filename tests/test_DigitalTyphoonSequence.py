@@ -137,7 +137,7 @@ class TestDigitalTyphoonSequence(TestCase):
 
         print("\n=== TESTING TRANSFORM_FUNC WITH LOAD_IMGS_INTO_MEM=TRUE ===")
         test_sequence = DigitalTyphoonSequence(
-            '200801', 2008, 5, spectrum='Infrared', verbose=True)
+            '200801', 2008, 5, spectrum='Infrared', verbose=False)
         
         print("Processing track data...")
         test_sequence.process_track_data('test_data_files/metadata/200801.csv')
