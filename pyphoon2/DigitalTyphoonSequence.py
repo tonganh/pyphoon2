@@ -265,7 +265,8 @@ class DigitalTyphoonSequence:
         print(f"  - Common image names: {len(common_image_names)} images")
         if common_image_names:
             print(f"  - First few image names: {common_image_names[:3]}")
-        
+        if filter_func is None:
+            filter_func = lambda img: True
         # Input validation
         valid_dirs = []
         for directory_path in directory_paths:
@@ -374,7 +375,7 @@ class DigitalTyphoonSequence:
                             load_imgs_into_mem=load_imgs_into_mem, 
                             spectrum=spectrum)
                         
-                        # Apply filter and add to sequence if it passes
+                        # Apply filter if filter_func
                         if filter_func(self.datetime_to_image[common_image_date]):
                             if self.datetime_to_image[common_image_date] not in self.images:
                                 self.images.append(self.datetime_to_image[common_image_date])

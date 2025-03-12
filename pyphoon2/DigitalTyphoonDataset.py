@@ -80,7 +80,7 @@ class DigitalTyphoonDataset(Dataset):
             image_dirs, metadata_dirs, metadata_jsons)
         
         # Store ignore_list as a set for faster lookups
-        self.ignore_list = set(ignore_list) if ignore_list else None
+        self.ignore_list = set(ignore_list) if ignore_list else []
         
         # Functions for processing
         self.filter_func = filter_func
@@ -406,6 +406,7 @@ class DigitalTyphoonDataset(Dataset):
             images_by_dir = {}
             
             # Collect image files from each directory
+
             for seq_dir in sequence_dirs:
                 try:
                     # Get all files in this directory
@@ -429,7 +430,6 @@ class DigitalTyphoonDataset(Dataset):
                         print(f"  Sample files: {all_files[:3]}")
                     if len(image_files) > 0:
                         print(f"  Sample image names: {image_files[:3]}")
-                    
                 except Exception as e:
                     print(f"  Error processing directory {seq_dir}: {str(e)}")
                     images_by_dir[seq_dir] = []
@@ -455,7 +455,6 @@ class DigitalTyphoonDataset(Dataset):
             
             # Process this sequence with the common images
             try:
-                breakpoint()
                 sequence_obj.process_seq_img_dirs_into_sequence(
                     directory_paths=sequence_dirs,
                     common_image_names=list(common_images),
