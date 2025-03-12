@@ -94,58 +94,30 @@ class DigitalTyphoonImage:
 
     def image(self, spectrum=None) -> np.ndarray:
         """
-        Gets this image as a numpy array.
+        Lazily opens the image file and returns the image array
 
-        If an image is already loaded, it is returned. Otherwise, the image is loaded from the h5 file.
-
-        If `self.transform_func` is not None, it is applied before returning the image.
-
-        :return: this image as a numpy array
+        :return: np.ndarray of the image data
         """
-        if self.image_array is not None:
-            image_array = self.image_array
-        else:
-            # Load the image from file
-            if not self.image_filepath:
-                if hasattr(self, 'verbose') and self.verbose:
-                    print(f"Warning: No image filepath set, returning empty array")
-                return np.array([], dtype=np.float64)
-
+        # Check if image data is already in memory
+        if self.image_array is None:
             try:
-                if spectrum is None:
-                    spectrum = self.spectrum
-                image_array = self._get_h5_image_as_numpy(self.image_filepath, spectrum)
-
-                if image_array.size == 0:
-                    if hasattr(self, 'verbose') and self.verbose:
-                        print(f"Warning: Image loaded from {self.image_filepath} is empty")
-                    return image_array
-                    
-                # If we should keep images in memory, store the loaded array
-                if self.load_imgs_into_mem:
-                    self.image_array = image_array
-                    if hasattr(self, 'verbose') and self.verbose:
-                        print(f"Loaded image into memory: {self.image_filepath}")
-                        
+                is_load_multiple_images = self.image_filepaths and len(self.image_filepaths) > 0
+                is_load_single_image = self.image_filepath is not None
+                if is_load_multiple_images or is_load_single_image:
+                    self.image_array = self._get_h5_image_as_numpy()
+                    if self.image_array is None or (hasattr(self.image_array, 'size') and self.image_array.size == 0):
+                        print(f"WARNING: Empty image after loading from {self.image_filepaths}")
+                else:
+                    # No image path available
+                    print(f"WARNING: No image path available for image in sequence {self.sequence_str}")
+                    # Return empty array with proper dimensions
+                    self.image_array = np.zeros((0, 0), dtype=np.float32)
             except Exception as e:
-                if hasattr(self, 'verbose') and self.verbose:
-                    print(f"Error loading image from {self.image_filepath}: {str(e)}")
-                    import traceback
-                    traceback.print_exc()
-                return np.array([], dtype=np.float64)
-
-        # Apply transform function if defined
-        if self.transform_func is not None:
-            try:
-                image_array = self.transform_func(image_array)
-                # If transform changes the array and we're keeping in memory, update stored array
-                if self.load_imgs_into_mem:
-                    self.image_array = image_array
-            except Exception as e:
-                if hasattr(self, 'verbose') and self.verbose:
-                    print(f"Error applying transform function: {str(e)}")
-
-        return image_array
+                print(f"ERROR loading image from {self.image_filepaths}: {str(e)}")
+                # Return empty array with proper dimensions
+                self.image_array = np.zeros((0, 0), dtype=np.float32)
+        
+        return self.image_array
 
     def sequence_id(self) -> str:
         """
@@ -727,11 +699,12 @@ class DigitalTyphoonImage:
         if self.load_imgs_into_mem:
             self.image()
 
-    def _get_h5_image_as_numpy(self, image_filepath: str, spectrum=None) -> np.ndarray:
+    def _get_h5_image_as_numpy(self, image_filepath=None, spectrum=None) -> np.ndarray:
         """
         Reads a single h5 image at the specified filepath as a numpy array.
+        If no filepath is provided but self.image_filepaths exists, uses those paths for multi-channel loading.
         
-        :param image_filepath: str, path to h5 image file
+        :param image_filepath: str, path to h5 image file (optional if self.image_filepaths is set)
         :param spectrum: The spectrum (channel) to read from multi-channel images
         :return: np.ndarray of the image data
         """
@@ -739,41 +712,52 @@ class DigitalTyphoonImage:
             spectrum = self.spectrum
 
         # Handle multi-channel case (list of filepaths)
-        if self.image_filepaths is not None and len(self.image_filepaths) > 0:
+        if image_filepath is None and self.image_filepaths is not None and len(self.image_filepaths) > 0:
             try:
                 multi_channel_data = []
                 
                 for filepath in self.image_filepaths:
                     # Read each file as a separate channel
                     if not os.path.exists(filepath):
+                        print(f"WARNING: File does not exist: {filepath}")
                         continue
                         
                     with h5py.File(filepath, 'r') as h5file:
                         # For h5 files, get the data from the first dataset
                         keys = list(h5file.keys())
                         if not keys:
+                            print(f"WARNING: No datasets found in file: {filepath}")
                             continue
                             
                         dataset_name = keys[0]
                         channel_data = np.array(h5file[dataset_name])
+                        if self.transform_func:
+                            channel_data = self.transform_func(channel_data)
                         multi_channel_data.append(channel_data)
                         
                 if not multi_channel_data:
+                    print(f"WARNING: No valid data loaded from any channel")
                     return np.array([])
                     
                 # Stack along channel dimension
                 result = np.stack(multi_channel_data, axis=0)
                 return result
             except Exception as e:
-                # Only print errors for serious issues
-                print(f"Error loading multi-channel image: {str(e)}")
+                print(f"ERROR loading multi-channel image: {str(e)}")
+                import traceback
+                traceback.print_exc()
                 return np.array([])
         
         # Handle single-channel case
         if image_filepath is None:
-            return np.array([])
+            if self.image_filepath is not None:
+                image_filepath = self.image_filepath
+            else:
+                print("WARNING: No image filepath provided")
+                return np.array([])
         
         if not os.path.exists(image_filepath):
+            print(f"WARNING: File does not exist: {image_filepath}")
             return np.array([])
         
         try:
@@ -781,10 +765,13 @@ class DigitalTyphoonImage:
                 # For h5 files, get the data from the first dataset
                 keys = list(h5file.keys())
                 if not keys:
+                    print(f"WARNING: No datasets found in file: {image_filepath}")
                     return np.array([])
                     
                 dataset_name = keys[0]
                 result = np.array(h5file[dataset_name])
+                if self.transform_func:
+                    result = self.transform_func(result)
                 return result
         except Exception as e:
             # Only print errors for serious issues if in verbose mode
