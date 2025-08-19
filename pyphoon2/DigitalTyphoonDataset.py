@@ -206,6 +206,7 @@ class DigitalTyphoonDataset(Dataset):
             seq = self.get_ith_sequence(idx)
             images = seq.get_all_images_in_sequence()
             image_arrays = np.array([image.image() for image in images])
+            # breakpoint()
             labels = np.array([self._labels_from_label_strs(
                 image, self.labels) for image in images])
             
@@ -361,8 +362,8 @@ class DigitalTyphoonDataset(Dataset):
                 if not os.path.exists(sequence_path):
                     print(f"Warning: Sequence directory {sequence_path} does not exist")
                     continue
-                if self.verbose:
-                    print(f"Processing sequence: {common_sequence} from {sequence_path}")
+                    
+                print(f"Processing sequence: {common_sequence} from {sequence_path}")
                 sequence_obj.process_seq_img_dir_into_sequence(
                     sequence_path,
                     load_imgs_into_mem=self.load_data_into_memory in {LOAD_DATA.ONLY_IMG, LOAD_DATA.ALL_DATA},
@@ -374,9 +375,8 @@ class DigitalTyphoonDataset(Dataset):
                 self.number_of_images += sequence_obj.get_num_images()
                 if sequence_obj.get_num_images() > 0:
                     self.number_of_nonempty_sequences += 1
-                
-                if self.verbose:
-                    print(f"Sequence {common_sequence} now has {sequence_obj.get_num_images()} images")
+                    
+                print(f"Sequence {common_sequence} now has {sequence_obj.get_num_images()} images")
             return
         
         # Setup for multi-directory processing
@@ -391,8 +391,7 @@ class DigitalTyphoonDataset(Dataset):
         for common_sequence in common_sequences:
             # Get the sequence object
             sequence_obj = self._get_seq_from_seq_str(common_sequence)
-            if self.verbose:
-                print(f"\nProcessing sequence {sequence_idx+1}/{len(common_sequences)}: {common_sequence}")
+            print(f"\nProcessing sequence {sequence_idx+1}/{len(common_sequences)}: {common_sequence}")
             sequence_idx += 1
             
             # Get the sequence directories
@@ -1186,7 +1185,8 @@ class DigitalTyphoonDataset(Dataset):
             return DigitalTyphoonImage("", np.array([]), 
                                       sequence_id=None, 
                                       spectrum=self.spectrum, 
-                                      verbose=self.verbose)
+                                      verbose=self.verbose,
+                                      image_filepaths=self.image_filepaths)
         except (IndexError, ValueError, KeyError, AttributeError) as e:
             if self.verbose:
                 print(f"Error accessing image at index {idx}: {str(e)}")
@@ -1194,7 +1194,8 @@ class DigitalTyphoonDataset(Dataset):
             return DigitalTyphoonImage("", np.array([]), 
                                       sequence_id=None,
                                       spectrum=self.spectrum,
-                                      verbose=self.verbose)
+                                      verbose=self.verbose,
+                                      image_filepaths=self.image_filepaths)
 
     def _get_list_of_sequence_objs(self) -> List[DigitalTyphoonSequence]:
         """

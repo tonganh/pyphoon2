@@ -4,9 +4,17 @@ import numpy as np
 from typing import List
 import pandas as pd
 from datetime import datetime
+import gc
+import psutil
 
 from pyphoon2.DigitalTyphoonUtils import TRACK_COLS
 
+def print_memory_info():
+    vm = psutil.virtual_memory()
+    print(f"\nMemory Status:")
+    print(f"Total: {vm.total/1e9:.1f}GB")
+    print(f"Available: {vm.available/1e9:.1f}GB")
+    print(f"Used: {vm.used/1e9:.1f}GB ({vm.percent}%)")
 
 class DigitalTyphoonImage:
     def __init__(self, image_filepath: str, track_data=None, sequence_id=None, load_imgs_into_mem=False,
@@ -98,25 +106,17 @@ class DigitalTyphoonImage:
 
         :return: np.ndarray of the image data
         """
-        # Check if image data is already in memory
-        if self.image_array is None:
+        # Check if image data is already in memory or array([], shape=(0, 0), dtype=float32)
+        if (self.image_array is None) or (self.image_array.size == 0):
             try:
-                is_load_multiple_images = self.image_filepaths and len(self.image_filepaths) > 0
-                is_load_single_image = self.image_filepath is not None
-                if is_load_multiple_images or is_load_single_image:
-                    self.image_array = self._get_h5_image_as_numpy()
-                    if self.image_array is None or (hasattr(self.image_array, 'size') and self.image_array.size == 0):
-                        print(f"WARNING: Empty image after loading from {self.image_filepaths}")
-                else:
-                    # No image path available
-                    print(f"WARNING: No image path available for image in sequence {self.sequence_str}")
-                    # Return empty array with proper dimensions
-                    self.image_array = np.zeros((0, 0), dtype=np.float32)
+                image = self._get_h5_image_as_numpy(self.image_filepath, self.spectrum)
+                if self.transform_func is not None:
+                    image = self.transform_func(image)
+                return image
             except Exception as e:
-                print(f"ERROR loading image from {self.image_filepaths}: {str(e)}")
+                print(f"ERROR loading image: {str(e)}")
                 # Return empty array with proper dimensions
                 self.image_array = np.zeros((0, 0), dtype=np.float32)
-        
         return self.image_array
 
     def sequence_id(self) -> str:
@@ -702,82 +702,82 @@ class DigitalTyphoonImage:
     def _get_h5_image_as_numpy(self, image_filepath=None, spectrum=None) -> np.ndarray:
         """
         Reads a single h5 image at the specified filepath as a numpy array.
-        If no filepath is provided but self.image_filepaths exists, uses those paths for multi-channel loading.
-        
-        :param image_filepath: str, path to h5 image file (optional if self.image_filepaths is set)
-        :param spectrum: The spectrum (channel) to read from multi-channel images
-        :return: np.ndarray of the image data
+        Memory-efficient version that processes one channel at a time.
         """
         if spectrum is None:
             spectrum = self.spectrum
 
-        # Handle multi-channel case (list of filepaths)
-        if image_filepath is None and self.image_filepaths is not None and len(self.image_filepaths) > 0:
+        # Handle multi-channel case
+        is_multi_channel = image_filepath is None and self.image_filepaths is not None and len(self.image_filepaths) > 0
+        if is_multi_channel:
             try:
-                multi_channel_data = []
-                
+                # Get first valid file to determine shape
+                first_shape = None
                 for filepath in self.image_filepaths:
-                    # Read each file as a separate channel
-                    if not os.path.exists(filepath):
-                        print(f"WARNING: File does not exist: {filepath}")
+                    if os.path.exists(filepath):
+                        with h5py.File(filepath, 'r') as h5file:
+                            keys = list(h5file.keys())
+                            if keys:
+                                dataset_name = keys[0]
+                                first_shape = h5file[dataset_name].shape
+                                break
+
+                if first_shape is None:
+                    print(f"WARNING: Could not determine image shape from any file")
+                    return np.array([], dtype=np.float32)
+
+                num_channels = len(self.image_filepaths)
+                
+                # Calculate memory needed
+                array_size = num_channels * np.prod(first_shape) * np.dtype(np.float32).itemsize
+                available_memory = psutil.virtual_memory().available
+                
+                # Regular loading if memory is sufficient
+                result = np.zeros((num_channels, *first_shape), dtype=np.float32)
+                for idx, filepath in enumerate(self.image_filepaths):
+                    try:
+                        with h5py.File(filepath, 'r') as h5file:
+                            keys = list(h5file.keys())
+                            if keys:
+                                dataset_name = keys[0]
+                                result[idx] = np.array(h5file[dataset_name], dtype=np.float32)
+                    except Exception as e:
+                        print(f"WARNING: Error loading channel {idx}: {str(e)}")
                         continue
-                        
-                    with h5py.File(filepath, 'r') as h5file:
-                        # For h5 files, get the data from the first dataset
-                        keys = list(h5file.keys())
-                        if not keys:
-                            print(f"WARNING: No datasets found in file: {filepath}")
-                            continue
-                            
-                        dataset_name = keys[0]
-                        channel_data = np.array(h5file[dataset_name])
-                        if self.transform_func:
-                            channel_data = self.transform_func(channel_data)
-                        multi_channel_data.append(channel_data)
-                        
-                if not multi_channel_data:
-                    print(f"WARNING: No valid data loaded from any channel")
-                    return np.array([])
-                    
-                # Stack along channel dimension
-                result = np.stack(multi_channel_data, axis=0)
+                # print("result shape: ", result.shape)
                 return result
+
+
             except Exception as e:
                 print(f"ERROR loading multi-channel image: {str(e)}")
-                import traceback
-                traceback.print_exc()
-                return np.array([])
-        
+                return np.array([], dtype=np.float32)
+
         # Handle single-channel case
         if image_filepath is None:
-            if self.image_filepath is not None:
-                image_filepath = self.image_filepath
-            else:
+            image_filepath = self.image_filepath
+            if image_filepath is None:
                 print("WARNING: No image filepath provided")
-                return np.array([])
+                return np.array([], dtype=np.float32)
         
         if not os.path.exists(image_filepath):
             print(f"WARNING: File does not exist: {image_filepath}")
-            return np.array([])
+            return np.array([], dtype=np.float32)
         
         try:
             with h5py.File(image_filepath, 'r') as h5file:
-                # For h5 files, get the data from the first dataset
                 keys = list(h5file.keys())
                 if not keys:
-                    print(f"WARNING: No datasets found in file: {image_filepath}")
-                    return np.array([])
+                    print(f"WARNING: No datasets in file: {image_filepath}")
+                    return np.array([], dtype=np.float32)
                     
                 dataset_name = keys[0]
-                result = np.array(h5file[dataset_name])
-                if self.transform_func:
-                    result = self.transform_func(result)
+                result = np.array(h5file[dataset_name], dtype=np.float32)
                 return result
         except Exception as e:
-            # Only print errors for serious issues if in verbose mode
             if hasattr(self, 'verbose') and self.verbose:
                 print(f"Error loading image {os.path.basename(image_filepath)}: {str(e)}")
-            return np.array([])
+            return np.array([], dtype=np.float32)
+
 
     def debug_track_data(self) -> None:
         """

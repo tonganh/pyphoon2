@@ -177,7 +177,6 @@ class DigitalTyphoonSequence:
                         if not os.path.exists(abs_file_path):
                             if self.verbose:
                                 print(f"Warning: Image file does not exist: {abs_file_path}")
-                                
                         image = DigitalTyphoonImage(
                             abs_file_path, 
                             track_data=track_data,  # Pass track data if available
@@ -185,7 +184,7 @@ class DigitalTyphoonSequence:
                             transform_func=self.transform_func, 
                             spectrum=self.spectrum,
                             load_imgs_into_mem=load_imgs_into_mem,
-                            verbose=self.verbose
+                            verbose=self.verbose,
                         )
                         
                         # Apply filter
