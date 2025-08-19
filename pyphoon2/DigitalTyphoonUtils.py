@@ -131,6 +131,29 @@ def parse_image_filename(filename: str, separator='-') -> Tuple[str, datetime, s
             f"Filename {filename} does not match the expected format.")
 
 
+def parse_common_image_filename(filename: str, separator='-') -> Tuple[str, datetime, str]:
+    """
+    Takes the filename of a Digital Typhoon image and parses it to return the date it was taken, the sequence ID
+    it belongs to, and the satellite that took the image
+
+    :param filename: str, filename of the image
+    :param separator: char, separator used in the filename
+    :return: (str, datetime, str), Tuple containing the sequence ID, the datetime, and satellite string
+    """
+    try:
+        date, sequence_num, satellite = filename.split(separator)
+        season = int(date[:4])
+        date_month = int(date[4:6])
+        date_day = int(date[6:8])
+        date_hour = int(date[8:10])
+        sequence_datetime = datetime(year=season, month=date_month,
+                                     day=date_day, hour=date_hour)
+        return sequence_num, sequence_datetime, satellite
+    except ValueError:
+        raise ValueError(
+            f"Filename {filename} does not match the expected format.")
+
+
 def get_seq_str_from_track_filename(filename: str) -> str:
     """
     Given a track filename, returns the sequence ID it belongs to.
@@ -144,7 +167,8 @@ def get_seq_str_from_track_filename(filename: str) -> str:
 
     # Validate the extension
     if ext.lower() != '.csv':
-        raise ValueError(f"Unexpected file extension: '{ext}'. Expected a '.csv' file.")
+        raise ValueError(
+            f"Unexpected file extension: '{ext}'. Expected a '.csv' file.")
 
     return sequence_num
 
